@@ -14,6 +14,7 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$_SESSION['user_id']]);
 $admin = $stmt->fetch();
+$is_superadmin_viewer = !empty($admin['superadmin_id']);
 
 $flash = null;
 
@@ -21,31 +22,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['toggle_verify'])) {
         $userId = (int)($_POST['user_id'] ?? 0);
         $verify = (int)($_POST['verify'] ?? 0);
-        if ($userId > 0) {
+        $stmt = $pdo->prepare("
+            SELECT a.id AS admin_id, sa.id AS superadmin_id
+            FROM users u
+            LEFT JOIN admins a ON a.user_id = u.id
+            LEFT JOIN superadmins sa ON sa.user_id = u.id
+            WHERE u.id = ?
+        ");
+        $stmt->execute([$userId]);
+        $target = $stmt->fetch();
+
+        if ($userId > 0 && ($is_superadmin_viewer || empty($target['superadmin_id']))) {
             $pdo->prepare("UPDATE users SET email_verified = ? WHERE id = ?")->execute([$verify, $userId]);
             $flash = ['type' => 'success', 'text' => 'User verification updated.'];
-        }
-    }
-
-    if (isset($_POST['toggle_deletion_flag'])) {
-        $userId = (int)($_POST['user_id'] ?? 0);
-        $marked = (int)($_POST['marked_for_deletion'] ?? 0);
-        if ($userId > 0) {
-            $pdo->prepare("UPDATE users SET marked_for_deletion = ?, deleted_at = ? WHERE id = ?")
-                ->execute([$marked, $marked ? date('Y-m-d H:i:s') : null, $userId]);
-            $flash = ['type' => 'success', 'text' => 'Deletion flag updated.'];
+        } else {
+            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be modified here.'];
         }
     }
 
     if (isset($_POST['delete_user'])) {
         $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM admins WHERE user_id = ?");
-        $stmt->execute([$userId]);
-        $isTargetAdmin = (int)$stmt->fetchColumn() > 0;
+        $stmt = $pdo->prepare("
+            SELECT
+                (SELECT COUNT(*) FROM admins WHERE user_id = ?) AS admin_count,
+                (SELECT COUNT(*) FROM superadmins WHERE user_id = ?) AS superadmin_count
+        ");
+        $stmt->execute([$userId, $userId]);
+        $targetFlags = $stmt->fetch();
 
-        if ($userId > 0 && !$isTargetAdmin && $userId !== (int)$_SESSION['user_id']) {
+        $isTargetAdmin = (int)$targetFlags['admin_count'] > 0;
+        $isTargetSuperadmin = (int)$targetFlags['superadmin_count'] > 0;
+
+        if (
+            $userId > 0 &&
+            !$isTargetAdmin &&
+            !$isTargetSuperadmin &&
+            $userId !== (int)$_SESSION['user_id']
+        ) {
             $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$userId]);
             $flash = ['type' => 'success', 'text' => 'User deleted successfully.'];
+        } elseif ($isTargetSuperadmin) {
+            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be viewed or modified here.'];
         } else {
             $flash = ['type' => 'error', 'text' => 'Admin accounts cannot be deleted here.'];
         }
@@ -58,7 +75,9 @@ $status = trim((string)($_GET['status'] ?? ''));
 
 $sql = "
     SELECT u.*,
+           sa.id AS superadmin_id,
            CASE
+               WHEN sa.id IS NOT NULL THEN 'Superadmin'
                WHEN a.id IS NOT NULL THEN 'Admin'
                WHEN s.id IS NOT NULL THEN 'Seller'
                WHEN c.id IS NOT NULL THEN 'Customer'
@@ -66,11 +85,16 @@ $sql = "
            END AS user_role
     FROM users u
     LEFT JOIN admins a ON a.user_id = u.id
+    LEFT JOIN superadmins sa ON sa.user_id = u.id
     LEFT JOIN sellers s ON s.user_id = u.id
     LEFT JOIN customers c ON c.user_id = u.id
     WHERE 1 = 1
 ";
 $params = [];
+
+if (!$is_superadmin_viewer) {
+    $sql .= " AND sa.id IS NULL ";
+}
 
 if ($search !== '') {
     $sql .= " AND (u.firstname LIKE ? OR u.lastname LIKE ? OR u.username LIKE ? OR u.email LIKE ?) ";
@@ -94,8 +118,6 @@ if ($status === 'verified') {
     $sql .= " AND u.email_verified = 1 ";
 } elseif ($status === 'unverified') {
     $sql .= " AND u.email_verified = 0 ";
-} elseif ($status === 'flagged') {
-    $sql .= " AND u.marked_for_deletion = 1 ";
 }
 
 $sql .= " ORDER BY u.created_at DESC";
@@ -112,10 +134,8 @@ $stmt->execute([$_SESSION['user_id']]);
 $unread_count = (int)$stmt->fetchColumn();
 
 $verified_count = 0;
-$flagged_count = 0;
 foreach ($users as $user) {
     if ((int)$user['email_verified'] === 1) $verified_count++;
-    if ((int)$user['marked_for_deletion'] === 1) $flagged_count++;
 }
 
 $current_page = basename($_SERVER['PHP_SELF']);
@@ -183,17 +203,21 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
-                <span class="ni">📝</span> About Menu
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
             </a>
 
             <div class="nav-lbl">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
                 <span class="ni">👤</span> My Profile
             </a>
+            
+            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
+                <span class="ni">📝</span> About Menu
+            </a>
             <a href="../logout.php" class="logout">
                 <span class="ni">🚪</span> Logout
-            </a>
+            </a>    
         </nav>
     </aside>
 
@@ -201,7 +225,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <div class="topbar">
             <div class="topbar-left">
                 <h1>Manage Users</h1>
-                <p>Review roles, verification, deletion flags, and account access.</p>
+                <p>Review roles, verification, and account access.</p>
             </div>
             <div class="topbar-right">
                 <span class="topbar-date"><?= date('F j, Y') ?></span>
@@ -220,7 +244,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <div class="stat-card"><div class="stat-icon">🔍</div><div><div class="stat-val"><?= number_format(count($users)) ?></div><div class="stat-lbl">Filtered Users</div></div></div>
                 <div class="stat-card"><div class="stat-icon">✔️</div><div><div class="stat-val"><?= number_format($verified_count) ?></div><div class="stat-lbl">Verified</div></div></div>
                 <div class="stat-card warn"><div class="stat-icon">✉️</div><div><div class="stat-val"><?= number_format(count($users) - $verified_count) ?></div><div class="stat-lbl">Unverified</div></div></div>
-                <div class="stat-card danger"><div class="stat-icon">🚩</div><div><div class="stat-val"><?= number_format($flagged_count) ?></div><div class="stat-lbl">Flagged</div></div></div>
             </div>
 
             <div class="dash-card">
@@ -246,7 +269,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <option value="">All statuses</option>
                                 <option value="verified" <?= $status === 'verified' ? 'selected' : '' ?>>Verified</option>
                                 <option value="unverified" <?= $status === 'unverified' ? 'selected' : '' ?>>Unverified</option>
-                                <option value="flagged" <?= $status === 'flagged' ? 'selected' : '' ?>>Flagged for deletion</option>
                             </select>
                         </div>
                         <div class="field">
@@ -269,7 +291,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                     <th>User</th>
                                     <th>Role</th>
                                     <th>Verification</th>
-                                    <th>Deletion Flag</th>
                                     <th>Created</th>
                                     <th>Actions</th>
                                 </tr>
@@ -286,7 +307,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                         </td>
                                         <td><span class="role-badge role-<?= strtolower($user['user_role']) ?>"><?= htmlspecialchars($user['user_role']) ?></span></td>
                                         <td><span class="status-badge <?= (int)$user['email_verified'] === 1 ? 'status-verified' : 'status-unverified' ?>"><?= (int)$user['email_verified'] === 1 ? 'Verified' : 'Unverified' ?></span></td>
-                                        <td><span class="status-badge <?= (int)$user['marked_for_deletion'] === 1 ? 'status-flagged' : 'status-active' ?>"><?= (int)$user['marked_for_deletion'] === 1 ? 'Flagged' : 'Active' ?></span></td>
                                         <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($user['created_at']))) ?></td>
                                         <td>
                                             <div class="actions">
@@ -294,11 +314,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                                     <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
                                                     <input type="hidden" name="verify" value="<?= (int)$user['email_verified'] === 1 ? '0' : '1' ?>">
                                                     <button type="submit" name="toggle_verify" class="btn-secondary"><?= (int)$user['email_verified'] === 1 ? 'Mark Unverified' : 'Verify User' ?></button>
-                                                </form>
-                                                <form method="post">
-                                                    <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
-                                                    <input type="hidden" name="marked_for_deletion" value="<?= (int)$user['marked_for_deletion'] === 1 ? '0' : '1' ?>">
-                                                    <button type="submit" name="toggle_deletion_flag" class="btn-secondary"><?= (int)$user['marked_for_deletion'] === 1 ? 'Clear Flag' : 'Flag Delete' ?></button>
                                                 </form>
                                                 <?php if ($user['user_role'] !== 'Admin' && (int)$user['id'] !== (int)$_SESSION['user_id']): ?>
                                                     <form method="post" onsubmit="return confirm('Delete this user permanently?');">

@@ -42,11 +42,7 @@ if (isset($_GET['notification_id']) && is_numeric($_GET['notification_id'])) {
     $stmt->execute([$_SESSION['user_id']]);
     
     // Optional: Log the action for audit trail
-    $stmt = $pdo->prepare("
-        INSERT INTO notifications (user_id, message, type) 
-        VALUES (?, 'All notifications marked as read', 'system')
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
+    createNotification($_SESSION['user_id'], 'All notifications marked as read', 'system');
     
     $_SESSION['flash_message'] = "All notifications have been marked as read.";
     $_SESSION['flash_type'] = "success";

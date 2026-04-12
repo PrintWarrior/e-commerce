@@ -77,8 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $success = "Application declined. {$app['firstname']} has been notified.";
         }
 
-        $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'seller_application')")
-            ->execute([$_SESSION['user_id'], "Application #$app_id $status for {$app['username']}."]);
+        createNotification($_SESSION['user_id'], "Application #$app_id $status for {$app['username']}.", 'seller_application');
 
         $pdo->commit();
         $_SESSION['flash_success'] = $success;
@@ -177,8 +176,9 @@ $stmt->execute();
 $declined = $stmt->fetchAll();
 
 $stmt = $pdo->prepare("
-    SELECT sp.*, s.business_name, s.phone, u.username, u.email, u.firstname, u.lastname
+    SELECT sp.*, pm.name AS payment_method_name, s.business_name, s.phone, u.username, u.email, u.firstname, u.lastname
     FROM seller_payouts sp
+    LEFT JOIN payment_methods pm ON sp.payment_method_id = pm.id
     JOIN sellers s ON sp.seller_id = s.id
     JOIN users u ON s.user_id = u.id
     WHERE sp.status IN ('pending', 'processing')
@@ -188,8 +188,9 @@ $stmt->execute();
 $open_payouts = $stmt->fetchAll();
 
 $stmt = $pdo->prepare("
-    SELECT sp.*, s.business_name, u.username, u.firstname, u.lastname
+    SELECT sp.*, pm.name AS payment_method_name, s.business_name, u.username, u.firstname, u.lastname
     FROM seller_payouts sp
+    LEFT JOIN payment_methods pm ON sp.payment_method_id = pm.id
     JOIN sellers s ON sp.seller_id = s.id
     JOIN users u ON s.user_id = u.id
     WHERE sp.status IN ('completed', 'failed')
@@ -273,14 +274,18 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
-                <span class="ni">📝</span> About Menu
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
             </a>
 
             <div class="nav-lbl">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
                 <span class="ni">👤</span> My Profile
             </a>
+            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
+                <span class="ni">📝</span> About Menu
+            </a>
+
             <a href="../logout.php" class="logout">
                 <span class="ni">🚪</span> Logout
             </a>    
@@ -572,7 +577,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                         </div>
                                         <div class="detail-item">
                                             <span class="detail-label">Method</span>
-                                            <span class="detail-val"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $payout['payment_method']))) ?></span>
+                                            <span class="detail-val"><?= htmlspecialchars($payout['payment_method_name'] ?? 'N/A') ?></span>
                                         </div>
                                         <div class="detail-item">
                                             <span class="detail-label">Status</span>
@@ -634,10 +639,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                                 <div class="sub-info">@<?= htmlspecialchars($payout['username']) ?></div>
                                             </td>
                                             <td>PHP <?= number_format($payout['amount'], 2) ?></td>
-                                            <td><?= htmlspecialchars(ucwords(str_replace('_', ' ', $payout['payment_method']))) ?></td>
+                                            <td><?= htmlspecialchars($payout['payment_method_name'] ?? 'N/A') ?></td>
                                             <td><span class="payout-status <?= htmlspecialchars($payout['status']) ?>"><?= htmlspecialchars(ucfirst($payout['status'])) ?></span></td>
-                                            <td><?= htmlspecialchars($payout['transaction_id'] ?: 'â€”') ?></td>
-                                            <td><?= $payout['processed_at'] ? date('M j, Y', strtotime($payout['processed_at'])) : 'â€”' ?></td>
+                                            <td><?= htmlspecialchars($payout['transaction_id'] ?: '') ?></td>
+                                            <td><?= $payout['processed_at'] ? date('M j, Y', strtotime($payout['processed_at'])) : '' ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>

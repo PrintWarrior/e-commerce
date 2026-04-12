@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['order_received'])) {
-        $stmt = $pdo->prepare("UPDATE orders SET status = 'completed', payment_status = 'paid' WHERE id = ? AND customer_id = ?");
+        $stmt = $pdo->prepare("UPDATE orders SET status = 'completed' WHERE id = ? AND customer_id = ?");
         $stmt->execute([$order_id, $customer_id]);
         $_SESSION['flash_success'] = "Order #$order_id marked as received. Thank you!";
     }
@@ -55,9 +55,10 @@ $status_filter = $_GET['status'] ?? 'all';
 $search        = $_GET['search'] ?? '';
 
 // ── Query ─────────────────────────────────────────────────────
-$query  = "SELECT o.*, COUNT(oi.id) AS item_count,
+$query  = "SELECT o.*, pm.name AS payment_method_name, COUNT(oi.id) AS item_count,
            GROUP_CONCAT(DISTINCT p.name SEPARATOR ', ') AS product_names
            FROM orders o
+           LEFT JOIN payment_methods pm ON o.payment_method_id = pm.id
            JOIN order_items oi ON o.id = oi.order_id
            JOIN products p ON oi.product_id = p.id
            WHERE o.customer_id = ? AND (o.hidden_from_customer IS NULL OR o.hidden_from_customer = 0)";
@@ -232,8 +233,8 @@ $counts['all'] = array_sum($counts);
                         <div class="order-meta-line">
                             <span class="label">Payment:</span>
                             <span>
-                                <?= strtoupper($order['payment_method'] ?? 'COD') ?> |
-                                <?= ucfirst($order['payment_status'] ?? 'Pending') ?>
+                                <?= htmlspecialchars(strtoupper($order['payment_method_name'] ?? 'COD')) ?> |
+                                <?= htmlspecialchars(getOrderPaymentStatus($order)) ?>
                             </span>
                         </div>
                     </div>

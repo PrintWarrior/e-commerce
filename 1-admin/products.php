@@ -198,13 +198,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
-                <span class="ni">📝</span> About Menu
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
             </a>
+            
 
             <div class="nav-lbl">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
                 <span class="ni">👤</span> My Profile
+            </a>
+            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
+                <span class="ni">📝</span> About Menu
             </a>
             <a href="../logout.php" class="logout">
                 <span class="ni">🚪</span> Logout

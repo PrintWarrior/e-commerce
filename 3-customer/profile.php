@@ -8,11 +8,13 @@ $user_id = $_SESSION['user_id'];
 $success = '';
 $error = '';
 
-// Get customer data from users and customers tables with address fields
+// Get customer data from users, customers, and default address tables
 $stmt = $pdo->prepare("
-    SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+    SELECT u.*, c.id as customer_id, c.phone,
+           a.id AS address_id, a.label, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
     FROM users u 
     LEFT JOIN customers c ON u.id = c.user_id 
+    LEFT JOIN addresses a ON c.default_address_id = a.id
     WHERE u.id = ?
 ");
 $stmt->execute([$user_id]);
@@ -20,13 +22,15 @@ $user = $stmt->fetch();
 
 // If customer doesn't exist, create it with default values
 if (!$user['customer_id']) {
-    $stmt = $pdo->prepare("INSERT INTO customers (user_id, phone, barangay, municipality, province, zip_code, address_details) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$user_id, '', '', '', '', '', '']);
+    $stmt = $pdo->prepare("INSERT INTO customers (user_id, phone) VALUES (?, ?)");
+    $stmt->execute([$user_id, '']);
     // Refresh user data
     $stmt = $pdo->prepare("
-        SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+        SELECT u.*, c.id as customer_id, c.phone,
+               a.id AS address_id, a.label, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
         FROM users u 
         LEFT JOIN customers c ON u.id = c.user_id 
+        LEFT JOIN addresses a ON c.default_address_id = a.id
         WHERE u.id = ?
     ");
     $stmt->execute([$user_id]);
@@ -59,9 +63,11 @@ if (isset($_POST['upload_image']) && !empty($_FILES['profile_pic']['tmp_name']))
             $success = "Profile picture uploaded successfully!";
             // Refresh user data
             $stmt = $pdo->prepare("
-                SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+                SELECT u.*, c.id as customer_id, c.phone,
+                       a.id AS address_id, a.label, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
                 FROM users u 
                 LEFT JOIN customers c ON u.id = c.user_id 
+                LEFT JOIN addresses a ON c.default_address_id = a.id
                 WHERE u.id = ?
             ");
             $stmt->execute([$user_id]);
@@ -82,9 +88,11 @@ if (isset($_POST['delete_image'])) {
         $success = "Profile picture deleted.";
         // Refresh user data
         $stmt = $pdo->prepare("
-            SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+            SELECT u.*, c.id as customer_id, c.phone,
+                   a.id AS address_id, a.label, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
             FROM users u 
             LEFT JOIN customers c ON u.id = c.user_id 
+            LEFT JOIN addresses a ON c.default_address_id = a.id
             WHERE u.id = ?
         ");
         $stmt->execute([$user_id]);
@@ -126,18 +134,28 @@ if (isset($_POST['update_profile'])) {
         $pdo->prepare("UPDATE users SET firstname=?, lastname=?, username=?, email=? WHERE id=?")
             ->execute([$firstname, $lastname, $username, $email, $user_id]);
         
-        // Update customers table with direct address columns
-        $pdo->prepare("UPDATE customers SET phone=?, barangay=?, municipality=?, province=?, zip_code=?, address_details=? WHERE user_id=?")
-            ->execute([$phone, $barangay, $municipality, $province, $zip_code, $address_details, $user_id]);
+        $pdo->prepare("UPDATE customers SET phone=? WHERE user_id=?")
+            ->execute([$phone, $user_id]);
+
+        upsertCustomerDefaultAddress((int) $user['customer_id'], [
+            'label' => 'Home',
+            'barangay' => $barangay,
+            'municipality' => $municipality,
+            'province' => $province,
+            'zip_code' => $zip_code,
+            'address_details' => $address_details,
+        ]);
         
         $_SESSION['username'] = $username;
         $success = "Profile updated successfully!";
         
         // Refresh user data
         $stmt = $pdo->prepare("
-            SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+            SELECT u.*, c.id as customer_id, c.phone,
+                   a.id AS address_id, a.label, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
             FROM users u 
             LEFT JOIN customers c ON u.id = c.user_id 
+            LEFT JOIN addresses a ON c.default_address_id = a.id
             WHERE u.id = ?
         ");
         $stmt->execute([$user_id]);

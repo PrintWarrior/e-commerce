@@ -54,15 +54,18 @@ if (empty($token)) {
                     
                     $message_body = "Seller {$user['username']} ({$user['email']}) has verified their email and is awaiting account approval.";
                     foreach ($admins as $admin_id) {
-                        $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'seller_application')");
-                        $stmt->execute([$admin_id, $message_body]);
+                        createNotification($admin_id, $message_body, 'seller_application');
                     }
                 }
             } elseif ($user['user_role'] == 'customer') {
                 // Create welcome notification for customer (optional)
+                createNotification($user['id'], 'Welcome to Beauty Mart! Your email has been verified.', 'system');
                 $stmt = $pdo->prepare("
-                    INSERT INTO notifications (user_id, message, type, is_read) 
-                    VALUES (?, 'Welcome to Beauty Mart! Your email has been verified.', 'system', 1)
+                    UPDATE notifications
+                    SET is_read = 1
+                    WHERE user_id = ?
+                    ORDER BY id DESC
+                    LIMIT 1
                 ");
                 $stmt->execute([$user['id']]);
             }

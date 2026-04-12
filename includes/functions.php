@@ -111,12 +111,12 @@ function sendEmail($to, $subject, $body) {
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
-        $mail->Username   = 'internshipapplicationportal@gmail.com';
-        $mail->Password   = 'fqwzszpjofuhlqzf';
+        $mail->Username   = 'beautymarkettalan@gmail.com';
+        $mail->Password   = 'bowbbecaxhyqljwg';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = 587;
 
-        $mail->setFrom('internshipapplicationportal@gmail.com', 'Beauty Mart');
+        $mail->setFrom('beautymarkettalan@gmail.com', 'Beauty Mart');
         $mail->addAddress($to);
 
         $mail->isHTML(true);
@@ -228,11 +228,173 @@ function sendPasswordResetEmail($email, $token) {
     return sendEmail($email, $subject, $body);
 }
 
+function getNotificationTypeId(string $code): ?int {
+    global $pdo;
+
+    static $cache = [];
+
+    $code = trim($code);
+    if ($code === '') {
+        return null;
+    }
+
+    if (isset($cache[$code])) {
+        return $cache[$code];
+    }
+
+    $stmt = $pdo->prepare("SELECT id FROM notification_types WHERE code = ? LIMIT 1");
+    $stmt->execute([$code]);
+    $typeId = $stmt->fetchColumn();
+
+    if ($typeId !== false) {
+        return $cache[$code] = (int) $typeId;
+    }
+
+    $label = ucwords(str_replace('_', ' ', $code));
+    $stmt = $pdo->prepare("
+        INSERT INTO notification_types (code, label, description)
+        VALUES (?, ?, ?)
+    ");
+    $stmt->execute([$code, $label, null]);
+
+    return $cache[$code] = (int) $pdo->lastInsertId();
+}
+
+function getNotificationCode(array $notification): string {
+    return (string) ($notification['type_code'] ?? $notification['code'] ?? $notification['type'] ?? 'system');
+}
+
+function getNotificationMeta(string $code): array {
+    return match ($code) {
+        'order'              => ['icon' => '📦', 'color' => '#2255cc', 'bg' => '#dce8ff', 'label' => 'Order'],
+        'new_user'           => ['icon' => '👤', 'color' => '#c75473', 'bg' => '#fce8ee', 'label' => 'New User'],
+        'deletion_request'   => ['icon' => '⚠️', 'color' => '#c0303a', 'bg' => '#fdecea', 'label' => 'Deletion'],
+        'seller_application' => ['icon' => '📝', 'color' => '#7322cc', 'bg' => '#f3e0ff', 'label' => 'Application'],
+        'payout'             => ['icon' => '💰', 'color' => '#1a7f4b', 'bg' => '#d1f5e0', 'label' => 'Payout'],
+        'system'             => ['icon' => '🔔', 'color' => '#856404', 'bg' => '#fff3cd', 'label' => 'System'],
+        'new_seller'         => ['icon' => '🏪', 'color' => '#8a5a00', 'bg' => '#fff1d6', 'label' => 'Seller'],
+        default              => ['icon' => '📌', 'color' => '#555', 'bg' => '#f5f5f5', 'label' => 'Notice'],
+    };
+}
+
+function getPaymentMethodId($value): ?int {
+    global $pdo;
+
+    if ($value === null) {
+        return null;
+    }
+
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return null;
+    }
+
+    if (ctype_digit($raw)) {
+        $stmt = $pdo->prepare("SELECT id FROM payment_methods WHERE id = ? AND is_active = 1 LIMIT 1");
+        $stmt->execute([(int) $raw]);
+        $id = $stmt->fetchColumn();
+        return $id === false ? null : (int) $id;
+    }
+
+    $normalized = strtolower(str_replace(['_', '-', ' '], '', $raw));
+    $map = [
+        'gcash' => 'GCash',
+        'maya' => 'Maya',
+        'paymaya' => 'Maya',
+        'cod' => 'COD',
+        'cashondelivery' => 'COD',
+        'banktransfer' => 'Bank Transfer',
+        'bank' => 'Bank Transfer',
+        'creditcard' => 'Credit Card',
+        'card' => 'Credit Card',
+    ];
+    $name = $map[$normalized] ?? $raw;
+
+    $stmt = $pdo->prepare("SELECT id FROM payment_methods WHERE name = ? AND is_active = 1 LIMIT 1");
+    $stmt->execute([$name]);
+    $id = $stmt->fetchColumn();
+
+    return $id === false ? null : (int) $id;
+}
+
+function getActivePaymentMethods(): array {
+    global $pdo;
+    $stmt = $pdo->query("SELECT id, name FROM payment_methods WHERE is_active = 1 ORDER BY id ASC");
+    return $stmt->fetchAll();
+}
+
+function getOrderPaymentStatus(array $order): string {
+    return in_array((string) ($order['status'] ?? ''), ['completed', 'paid'], true) ? 'Paid' : 'Pending';
+}
+
+function getCustomerAddressByCustomerId(int $customerId): ?array {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT a.*
+        FROM customers c
+        LEFT JOIN addresses a ON c.default_address_id = a.id
+        WHERE c.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$customerId]);
+    $address = $stmt->fetch();
+
+    return $address ?: null;
+}
+
+function upsertCustomerDefaultAddress(int $customerId, array $addressData): ?int {
+    global $pdo;
+
+    $current = getCustomerAddressByCustomerId($customerId);
+    $params = [
+        $addressData['label'] ?? 'Home',
+        $addressData['address_details'] ?? null,
+        $addressData['barangay'] ?? null,
+        $addressData['municipality'] ?? null,
+        $addressData['province'] ?? null,
+        $addressData['zip_code'] ?? null,
+    ];
+
+    if ($current && !empty($current['id'])) {
+        $stmt = $pdo->prepare("
+            UPDATE addresses
+            SET label = ?, address_details = ?, barangay = ?, municipality = ?, province = ?, zip_code = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([...$params, $current['id']]);
+        return (int) $current['id'];
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO addresses (customer_id, label, address_details, barangay, municipality, province, zip_code)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ");
+    $stmt->execute([
+        $customerId,
+        ...$params,
+    ]);
+    $addressId = (int) $pdo->lastInsertId();
+
+    $stmt = $pdo->prepare("UPDATE customers SET default_address_id = ? WHERE id = ?");
+    $stmt->execute([$addressId, $customerId]);
+
+    return $addressId;
+}
+
 // Create notification for any user
 function createNotification($user_id, $message, $type) {
     global $pdo;
-    $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, ?)");
-    return $stmt->execute([$user_id, $message, $type]);
+    $typeId = getNotificationTypeId((string) $type);
+    if ($typeId === null) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("
+        INSERT INTO notifications (user_id, message, notification_type_id)
+        VALUES (?, ?, ?)
+    ");
+    return $stmt->execute([$user_id, $message, $typeId]);
 }
 
 // Get the best available client IP address for audit logs

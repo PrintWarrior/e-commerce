@@ -142,100 +142,509 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <title>Create Users | Beauty Mart Superadmin</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* ── Reset & Base ─────────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
         :root {
-            --cream: #fffaf2;
-            --gold: #d4a24c;
-            --gold-deep: #b98426;
-            --ink: #2f2417;
-            --muted: #7c6b56;
-            --line: #ecdcc0;
-            --card: #ffffff;
-            --soft: #f7efe1;
-            --danger-bg: #fdecea;
-            --danger-border: #f2c6cc;
-            --danger-text: #b4434f;
-            --success-bg: #eaf7ee;
-            --success-border: #cce7d4;
-            --success-text: #2f7a4d;
-            --shadow: 0 16px 35px rgba(120, 82, 29, 0.10);
-            --radius: 18px;
-            --sidebar: 270px;
+          --pink-light: #fce8ee;
+          --pink-mid: #f9d0dc;
+          --pink-accent: #e8728e;
+          --pink-dark: #c75473;
+          --text-dark: #2e2e2e;
+          --text-mid: #555;
+          --text-muted: #888;
+          --white: #ffffff;
+          --radius: 14px;
+          --shadow: 0 4px 18px rgba(200, 80, 110, 0.12);
         }
-        body { min-height: 100vh; font-family: 'Nunito', sans-serif; background: radial-gradient(circle at top right, rgba(212,162,76,.18), transparent 28%), linear-gradient(180deg, #fffdf8, var(--cream)); color: var(--ink); }
-        a { color: inherit; text-decoration: none; }
-        .shell { display: flex; min-height: 100vh; }
+
+        html, body {
+          font-family: "Nunito", sans-serif;
+          background: #fdf5f7;
+          color: var(--text-dark);
+          min-height: 100vh;
+        }
+
+        a {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        ul, li {
+          list-style: none;
+        }
+
+        /* ── Layout Shell ────────────────────────────────────────────── */
+        .shell {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          min-height: 100vh;
+          gap: 0;
+        }
+
+        /* ── Sidebar ──────────────────────────────────────────────────── */
         .sidebar {
-            width: var(--sidebar); background: rgba(255,255,255,.92); backdrop-filter: blur(10px);
-            border-right: 1px solid var(--line); padding: 22px 16px; display: flex; flex-direction: column; gap: 18px;
+          background: #fff;
+          border-right: 1.5px solid var(--pink-mid);
+          padding: 24px 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          overflow-y: auto;
         }
-        .brand, .profile, .form-card, .help-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-        .brand { display: flex; align-items: center; gap: 12px; padding: 14px; }
-        .brand-icon { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; overflow: hidden; }
-        .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
-        .brand-title { font-family: 'Playfair Display', serif; font-size: 18px; }
-        .brand-sub { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-        .profile { padding: 16px; display: flex; gap: 12px; align-items: center; }
-        .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; overflow: hidden; }
-        .avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .profile small { display: inline-block; margin-top: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: var(--gold-deep); background: var(--soft); border: 1px solid var(--line); }
-        .nav { display: flex; flex-direction: column; gap: 8px; }
-        .nav a { padding: 13px 14px; border-radius: 14px; font-weight: 700; color: var(--muted); border: 1px solid transparent; transition: .18s ease; }
-        .nav a:hover, .nav a.active { background: var(--soft); border-color: var(--line); color: var(--ink); transform: translateX(2px); }
-        .main { flex: 1; min-width: 0; padding: 26px; display: flex; flex-direction: column; gap: 22px; }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .brand-icon {
+          width: 52px;
+          height: 52px;
+          background: var(--pink-light);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 24px;
+          line-height: 1;
+          flex-shrink: 0;
+        }
+
+        .brand-icon img {
+          width: 70%;
+          height: 70%;
+          object-fit: contain;
+        }
+
+        .brand-title {
+          font-family: "Playfair Display", serif;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--pink-accent);
+        }
+
+        .brand-sub {
+          font-size: 12px;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+
+        .profile {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px;
+          background: var(--pink-light);
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+        }
+
+        .avatar {
+          width: 48px;
+          height: 48px;
+          background: var(--pink-accent);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          font-weight: 700;
+          font-size: 18px;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+
+        .avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .profile > div {
+          min-width: 0;
+        }
+
+        .profile div:first-child {
+          font-weight: 800;
+          font-size: 14px;
+          color: var(--text-dark);
+        }
+
+        .profile small {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .nav {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          flex: 1;
+        }
+
+        .nav a {
+          padding: 12px 14px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-mid);
+          transition: all 0.2s;
+          border-left: 3px solid transparent;
+        }
+
+        .nav a:hover {
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          border-left-color: var(--pink-accent);
+        }
+
+        .nav a.active {
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          border-left-color: var(--pink-accent);
+        }
+
+        /* ── Main Content ────────────────────────────────────────────── */
+        .main {
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+          overflow-y: auto;
+        }
+
+        /* ── Hero Section ────────────────────────────────────────────── */
         .hero {
-            background: linear-gradient(135deg, rgba(212,162,76,.18), rgba(255,255,255,.94));
-            border: 1px solid var(--line); border-radius: 26px; padding: 28px; box-shadow: var(--shadow);
-            display: flex; justify-content: space-between; gap: 18px; align-items: center;
+          background: linear-gradient(135deg, #fce8ee 0%, #fdf5f7 60%, #fce8ee 100%);
+          border-radius: var(--radius);
+          padding: 28px;
+          border: 1.5px solid var(--pink-mid);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 20px;
         }
-        .hero h1 { font-family: 'Playfair Display', serif; font-size: 34px; margin-bottom: 8px; }
-        .hero p { color: var(--muted); max-width: 760px; line-height: 1.6; }
-        .hero-badges { display: flex; gap: 10px; flex-wrap: wrap; }
-        .hero-badges span { padding: 10px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-weight: 800; font-size: 13px; }
-        .content-grid { display: grid; grid-template-columns: 1.3fr .7fr; gap: 20px; }
-        .form-card { padding: 24px; }
-        .help-card { padding: 22px; }
-        .section-title { font-size: 18px; font-weight: 900; margin-bottom: 18px; }
-        .flash { padding: 14px 16px; border-radius: 14px; margin-bottom: 18px; font-weight: 700; line-height: 1.5; }
-        .flash.success { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success-text); }
-        .flash.error { background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); }
-        .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-        .field.full { grid-column: 1 / -1; }
-        label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 800; color: var(--ink); }
-        input, select, textarea {
-            width: 100%; padding: 13px 14px; border-radius: 14px; border: 1px solid var(--line);
-            background: #fff; color: var(--ink); font: inherit;
+
+        .hero h1 {
+          font-family: "Playfair Display", serif;
+          font-size: 28px;
+          font-weight: 700;
+          color: var(--pink-dark);
+          margin-bottom: 8px;
         }
-        textarea { min-height: 110px; resize: vertical; }
-        .hint { margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+        .hero p {
+          font-size: 14px;
+          color: var(--text-mid);
+          line-height: 1.6;
+        }
+
+        .hero-badges {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 180px;
+        }
+
+        .hero-badges span {
+          background: #fff;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--pink-accent);
+          text-align: right;
+        }
+
+        /* ── Content Grid ────────────────────────────────────────────── */
+        .content-grid {
+          display: grid;
+          grid-template-columns: 2fr 1fr;
+          gap: 20px;
+        }
+
+        @media (max-width: 1000px) {
+          .content-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* ── Form Card ───────────────────────────────────────────────── */
+        .form-card {
+          background: #fff;
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+          box-shadow: var(--shadow);
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .section-title {
+          font-family: "Playfair Display", serif;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-dark);
+        }
+
+        /* ── Flash Messages ──────────────────────────────────────────– */
+        .flash {
+          padding: 14px 18px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          border-left: 4px solid;
+        }
+
+        .flash.success {
+          background: #e8f5e9;
+          color: #2e7d32;
+          border-left-color: #4caf50;
+        }
+
+        .flash.error {
+          background: #ffebee;
+          color: #c62828;
+          border-left-color: #f44336;
+        }
+
+        /* ── Form Grid ───────────────────────────────────────────────– */
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+        }
+
+        .field.full {
+          grid-column: 1 / -1;
+        }
+
+        .field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .field label {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--text-dark);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .field input,
+        .field select,
+        .field textarea {
+          padding: 12px 14px;
+          border: 1.5px solid var(--pink-mid);
+          border-radius: 10px;
+          font-family: "Nunito", sans-serif;
+          font-size: 14px;
+          color: var(--text-dark);
+          background: #fdf5f7;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+          border-color: var(--pink-accent);
+          background: #fff;
+        }
+
+        .field textarea {
+          resize: vertical;
+          min-height: 80px;
+        }
+
+        .field input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .hint {
+          font-size: 11px;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
+
+        /* ── Seller Fields ───────────────────────────────────────────– */
         .seller-fields {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 16px;
-            padding: 16px;
-            border: 1px dashed var(--line);
-            border-radius: 16px;
-            background: #fffdfa;
+          grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+          padding: 16px;
+          background: var(--pink-light);
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
         }
-        .seller-fields.hidden { display: none; }
-        .actions { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; }
-        .btn-primary, .btn-secondary {
-            display: inline-flex; align-items: center; justify-content: center;
-            padding: 13px 18px; border-radius: 14px; font-weight: 800; border: 1px solid var(--line);
-            cursor: pointer; font: inherit;
+
+        .seller-fields.hidden {
+          display: none;
         }
-        .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #fff; border: none; }
-        .btn-secondary { background: #fff; color: var(--ink); }
-        .help-card ul { padding-left: 18px; color: var(--muted); line-height: 1.8; }
-        .help-card strong { color: var(--ink); }
-        @media (max-width: 1100px) { .content-grid { grid-template-columns: 1fr; } }
-        @media (max-width: 840px) {
-            .shell { flex-direction: column; }
-            .sidebar { width: 100%; }
-            .main { padding: 18px; }
-            .hero { flex-direction: column; align-items: flex-start; }
-            .form-grid, .seller-fields { grid-template-columns: 1fr; }
+
+        .seller-fields .field.full {
+          grid-column: 1 / -1;
+        }
+
+        /* ── Actions ──────────────────────────────────────────────────– */
+        .actions {
+          display: flex;
+          gap: 12px;
+          margin-top: 12px;
+          border-top: 1.5px solid var(--pink-mid);
+          padding-top: 18px;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+          padding: 12px 20px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 700;
+          border: none;
+          cursor: pointer;
+          font-family: "Nunito", sans-serif;
+          transition: all 0.2s;
+          text-align: center;
+          display: inline-block;
+        }
+
+        .btn-primary {
+          background: var(--pink-accent);
+          color: #fff;
+          border: 1.5px solid var(--pink-accent);
+        }
+
+        .btn-primary:hover {
+          background: var(--pink-dark);
+          border-color: var(--pink-dark);
+        }
+
+        .btn-secondary {
+          background: #fff;
+          color: var(--pink-accent);
+          border: 1.5px solid var(--pink-accent);
+        }
+
+        .btn-secondary:hover {
+          background: var(--pink-light);
+        }
+
+        /* ── Help Card ───────────────────────────────────────────────– */
+        .help-card {
+          background: #fff;
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+          box-shadow: var(--shadow);
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .help-card ul {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .help-card li {
+          font-size: 13px;
+          color: var(--text-mid);
+          line-height: 1.6;
+          padding-left: 6px;
+          border-left: 3px solid var(--pink-accent);
+          padding: 0 0 0 12px;
+        }
+
+        .help-card li strong {
+          color: var(--pink-accent);
+          font-weight: 700;
+        }
+
+        /* ── Scrollbar ───────────────────────────────────────────────– */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: var(--pink-mid);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: var(--pink-accent);
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────– */
+        @media (max-width: 768px) {
+          .shell {
+            grid-template-columns: 1fr;
+          }
+
+          .sidebar {
+            height: auto;
+            position: static;
+            border-right: none;
+            border-bottom: 1.5px solid var(--pink-mid);
+            padding: 14px;
+          }
+
+          .main {
+            padding: 14px;
+          }
+
+          .hero {
+            flex-direction: column;
+          }
+
+          .hero-badges {
+            flex-direction: row;
+            min-width: auto;
+          }
+
+          .hero-badges span {
+            text-align: center;
+            flex: 1;
+          }
+
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .seller-fields {
+            grid-template-columns: 1fr;
+          }
+
+          .actions {
+            flex-direction: column;
+          }
+
+          .btn-primary,
+          .btn-secondary {
+            width: 100%;
+          }
         }
     </style>
 </head>
@@ -267,13 +676,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </div>
 
         <nav class="nav">
-            <a href="dashboard.php">Dashboard</a>
+            <a href="dashboard.php" class="<?= $current_page === 'dashboard.php' ? 'active' : '' ?>">Dashboard</a>
             <a href="create_users.php" class="<?= $current_page === 'create_users.php' ? 'active' : '' ?>">Create Users</a>
             <a href="manage_users.php">Manage Users</a>
             <a href="products.php">Manage Products</a>
             <a href="system_logs.php">System Logs</a>
             <a href="notifications.php">Notifications<?= $unread_count > 0 ? ' (' . $unread_count . ')' : '' ?></a>
-            <a href="logout.php">Logout</a>
+            <a href="../logout.php">Logout</a>
         </nav>
     </aside>
 
@@ -292,7 +701,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
         <section class="content-grid">
             <div class="form-card">
-                <div class="section-title">New Account Form</div>
+                <h2 class="section-title">New Account Form</h2>
 
                 <?php if ($flash): ?>
                     <div class="flash <?= $flash['type'] === 'success' ? 'success' : 'error' ?>">
@@ -374,7 +783,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </div>
 
             <aside class="help-card">
-                <div class="section-title">How This Works</div>
+                <h2 class="section-title">How This Works</h2>
                 <ul>
                     <li><strong>Admin</strong> creates a row in `users` and `admins`.</li>
                     <li><strong>Customer</strong> creates a row in `users` and `customers`.</li>

@@ -8,16 +8,23 @@ if (!$customer_id) redirect('dashboard.php');
 
 // Fetch order
 $stmt = $pdo->prepare("
-    SELECT o.*, c.default_shipping_address
+    SELECT o.*, pm.name AS payment_method_name, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
     FROM orders o
-    JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN payment_methods pm ON o.payment_method_id = pm.id
+    LEFT JOIN addresses a ON o.shipping_address_id = a.id
     WHERE o.id = ? AND o.customer_id = ?
 ");
 $stmt->execute([$order_id, $customer_id]);
 $order = $stmt->fetch();
 if (!$order) redirect('orders.php');
 
-$shipping_address = json_decode($order['default_shipping_address'] ?? '{}', true);
+$shipping_address = [
+    'barangay' => $order['barangay'] ?? '',
+    'municipality' => $order['municipality'] ?? '',
+    'province' => $order['province'] ?? '',
+    'zip_code' => $order['zip_code'] ?? '',
+    'address_details' => $order['address_details'] ?? '',
+];
 
 // Fetch order items
 $stmt = $pdo->prepare("
@@ -141,7 +148,7 @@ if ($current_index === false) $current_index = -1; // cancelled / other
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Payment</span>
-                            <span class="meta-val"><?= strtoupper($order['payment_method'] ?? 'COD') ?></span>
+                            <span class="meta-val"><?= htmlspecialchars(strtoupper($order['payment_method_name'] ?? 'COD')) ?></span>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Status</span>
@@ -243,11 +250,11 @@ if ($current_index === false) $current_index = -1; // cancelled / other
                     <div class="info-card-body">
                         <div class="info-row">
                             <span class="il">Method:</span>
-                            <span class="iv"><?= strtoupper($order['payment_method'] ?? 'COD') ?></span>
+                            <span class="iv"><?= htmlspecialchars(strtoupper($order['payment_method_name'] ?? 'COD')) ?></span>
                         </div>
                         <div class="info-row">
                             <span class="il">Payment Status:</span>
-                            <span class="iv"><?= ucfirst($order['payment_status'] ?? 'Pending') ?></span>
+                            <span class="iv"><?= htmlspecialchars(getOrderPaymentStatus($order)) ?></span>
                         </div>
                         <div class="info-row">
                             <span class="il">Order Status:</span>

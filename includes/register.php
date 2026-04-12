@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (strlen($password) < 6) $errors[] = "Password must be at least 6 characters";
     if ($password !== $confirm) $errors[] = "Passwords do not match";
 
-    // Handle profile picture upload
+    /* Handle profile picture upload
     $profile_pic = null;
     if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] == 0) {
         $target_dir = "uploads/profile_images/";
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $profile_pic = $file_name;
             }
         }
-    }
+    }*/
 
     if (empty($errors)) {
         $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
@@ -57,8 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $pdo->beginTransaction();
             try {
                 // Insert into users table
-                $stmt = $pdo->prepare("INSERT INTO users (firstname, lastname, username, email, password, profile_pic, verification_token) VALUES (?, ?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$firstname, $lastname, $username, $email, $hashed, $profile_pic, $token]);
+                $stmt = $pdo->prepare("INSERT INTO users (firstname, lastname, username, email, password, verification_token) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$firstname, $lastname, $username, $email, $hashed, $token]);
                 $user_id = $pdo->lastInsertId();
                 
                 // Insert into customers table
@@ -73,8 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 // Notify admins
                 $message = "New customer registered: $username ($email) awaiting email verification from admin.";
                 foreach ($admins as $admin_id) {
-                    $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'new_user')");
-                    $stmt->execute([$admin_id, $message]);
+                    createNotification($admin_id, $message, 'new_user');
                 }
                 
                 $pdo->commit();
@@ -165,11 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 <form method="post" enctype="multipart/form-data" autocomplete="off">
 
-                    <div class="field">
+                    <!--<div class="field">
                         <label for="profile_image">Profile Image (optional)</label>
                         <input type="file" id="profile_image" name="profile_image" accept="image/*">
                         <div class="info-note">Max size: 5MB. Allowed: JPG, JPEG, PNG, GIF</div>
-                    </div>
+                    </div>-->
 
                     <div class="field-row">
                         <div class="field">

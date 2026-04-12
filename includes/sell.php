@@ -69,8 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['register_seller'])) {
             // Notify admins
             $message = "New seller registration: $username ($email) - Business: $business_name. Awaiting email verification from admin and seller application review.";
             foreach ($admins as $admin_id) {
-                $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'new_seller')");
-                $stmt->execute([$admin_id, $message]);
+                createNotification($admin_id, $message, 'new_seller');
             }
             
             $pdo->commit();
@@ -225,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['register_seller'])) {
                 
                 <div class="form-group checkbox-group">
                     <input type="checkbox" id="agree_terms" name="agree_terms" required>
-                    <label for="agree_terms">I agree to the <a href="terms.php" target="_blank">Terms & Conditions</a> for sellers *</label>
+                    <label for="agree_terms">I agree to the Terms & Conditions for sellers *</label>
                 </div>
                 
                 <button type="submit" name="register_seller" class="btn-submit">Register as Seller</button>

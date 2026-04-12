@@ -11,11 +11,13 @@ if (!$customer_id) {
     $customer_id = $pdo->lastInsertId();
 }
 
-// Get user details
+// Get user details and default shipping address
 $stmt = $pdo->prepare("
-    SELECT u.*, c.id as customer_id, c.phone, c.barangay, c.municipality, c.province, c.zip_code, c.address_details
+    SELECT u.*, c.id as customer_id, c.phone,
+           a.id AS address_id, a.barangay, a.municipality, a.province, a.zip_code, a.address_details
     FROM users u 
     LEFT JOIN customers c ON u.id = c.user_id 
+    LEFT JOIN addresses a ON c.default_address_id = a.id
     WHERE u.id = ?
 ");
 $stmt->execute([$user_id]);
@@ -40,11 +42,18 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payment_method = $_POST['payment_method'] ?? 'cod';
+    $payment_method_id = getPaymentMethodId($payment_method);
+    $shipping_address_id = !empty($user['address_id']) ? (int) $user['address_id'] : 0;
 
+    if ($shipping_address_id <= 0) {
+        $error = "Please set your shipping address in your profile before checking out.";
+    } elseif ($payment_method_id === null) {
+        $error = "Please select a valid payment method.";
+    } else {
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare("INSERT INTO orders (customer_id, total_amount, status, payment_method) VALUES (?, ?, 'pending', ?)");
-        $stmt->execute([$customer_id, $total, $payment_method]);
+        $stmt = $pdo->prepare("INSERT INTO orders (customer_id, total_amount, shipping_address_id, status, payment_method_id) VALUES (?, ?, ?, 'pending', ?)");
+        $stmt->execute([$customer_id, $total, $shipping_address_id, $payment_method_id]);
         $order_id = $pdo->lastInsertId();
 
         $stmt = $pdo->prepare("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)");
@@ -69,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (Exception $e) {
         $pdo->rollBack();
         $error = "Checkout failed: " . $e->getMessage();
+    }
     }
 }
 ?>
@@ -230,11 +240,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                            onchange="document.getElementById('payment_method_input').value=this.value">
                                     Cash on Delivery
                                 </label>
-                                <label class="payment-option">
-                                    <input type="radio" name="payment_choice" value="pickup"
+                                <!--<label class="payment-option">
+                                    <input type="radio" name="payment_choice" value="gcash"
                                            onchange="document.getElementById('payment_method_input').value=this.value">
-                                    Pickup
-                                </label>
+                                    GCash
+                                </label>-->
                             </div>
                         </div>
 

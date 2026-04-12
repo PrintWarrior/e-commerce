@@ -172,13 +172,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span class="nav-badge"><?= $unread_notifs ?></span>
                 <?php endif; ?>
             </a>
-            <a href="about.php" class="<?= $current_page === 'about.php' ? 'active' : '' ?>">
-                <span class="nav-icon">📝</span> About Menu
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
             </a>
+            
 
             <div class="nav-section-label">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
                 <span class="nav-icon">👤</span> My Profile
+            </a>
+            <a href="about.php" class="<?= $current_page === 'about.php' ? 'active' : '' ?>">
+                <span class="nav-icon">📝</span> About Menu
             </a>
             <a href="../logout.php" class="logout">
                 <span class="nav-icon">🚪</span> Logout
@@ -230,7 +234,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <h2>Jayle Luza Talan</h2>
                         <div class="about-body">
                     <p class="about-text">
-                        Hi! I’m Jayle Talan, the owner of Beauty Mart. I run this online makeup store and manage everything behind the scenes using my skills in HTML, JavaScript, and web management. My admin profile helps me organize products, process customer orders, update inventory, and keep the store running smoothly. By combining my technical skills with my passion for cosmetics, I create an efficient, user-friendly system that makes shopping easy and enjoyable for my customers while keeping all operations organized and professional.
+                        Hi! im Jayle, from Tangub City studied at NMSCST a BSIT course, a CEO of Beauty Mart
                     </p>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <span style="background:var(--pink-pale);border:1.5px solid var(--pink-mid);border-radius:20px;padding:4px 14px;font-size:12.5px;font-weight:800;color:var(--pink-accent);">PHP</span>

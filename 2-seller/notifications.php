@@ -40,16 +40,16 @@ $success = $_SESSION['flash_success'] ?? ''; unset($_SESSION['flash_success']);
 $filter = $_GET['filter'] ?? 'all';
 $search = $_GET['search'] ?? '';
 
-$query  = "SELECT * FROM notifications WHERE user_id = ?";
+$query  = "SELECT n.*, nt.code AS type_code, nt.label AS type_label FROM notifications n LEFT JOIN notification_types nt ON n.notification_type_id = nt.id WHERE n.user_id = ?";
 $params = [$user_id];
-if ($filter === 'unread') { $query .= " AND is_read = 0"; }
-elseif ($filter === 'read') { $query .= " AND is_read = 1"; }
+if ($filter === 'unread') { $query .= " AND n.is_read = 0"; }
+elseif ($filter === 'read') { $query .= " AND n.is_read = 1"; }
 if ($search) {
-    $query  .= " AND (message LIKE ? OR type LIKE ?)";
+    $query  .= " AND (n.message LIKE ? OR nt.code LIKE ? OR nt.label LIKE ?)";
     $sp      = "%$search%";
-    $params  = array_merge($params, [$sp, $sp]);
+    $params  = array_merge($params, [$sp, $sp, $sp]);
 }
-$query .= " ORDER BY created_at DESC";
+$query .= " ORDER BY n.created_at DESC";
 $stmt   = $pdo->prepare($query);
 $stmt->execute($params);
 $notifications = $stmt->fetchAll();
@@ -207,7 +207,7 @@ function notif_meta(string $type): array {
                     </div>
                 <?php else: ?>
                     <?php foreach ($notifications as $n):
-                        $meta = notif_meta($n['type']);
+                        $meta = notif_meta(getNotificationCode($n));
                     ?>
                     <div class="notif-item <?= $n['is_read'] ? 'read' : 'unread' ?>">
 

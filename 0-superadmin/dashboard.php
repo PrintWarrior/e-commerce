@@ -74,74 +74,441 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <title>Superadmin Dashboard | Beauty Mart</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        /* ── Reset & Base ─────────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
         :root {
-            --cream: #fffaf2;
-            --gold: #d4a24c;
-            --gold-deep: #b98426;
-            --ink: #2f2417;
-            --muted: #7c6b56;
-            --line: #ecdcc0;
-            --card: #ffffff;
-            --soft: #f7efe1;
-            --shadow: 0 16px 35px rgba(120, 82, 29, 0.10);
-            --radius: 18px;
-            --sidebar: 270px;
+          --pink-light: #fce8ee;
+          --pink-mid: #f9d0dc;
+          --pink-accent: #e8728e;
+          --pink-dark: #c75473;
+          --text-dark: #2e2e2e;
+          --text-mid: #555;
+          --text-muted: #888;
+          --white: #ffffff;
+          --radius: 14px;
+          --shadow: 0 4px 18px rgba(200, 80, 110, 0.12);
         }
-        body { min-height: 100vh; font-family: 'Nunito', sans-serif; background: radial-gradient(circle at top right, rgba(212,162,76,.18), transparent 28%), linear-gradient(180deg, #fffdf8, var(--cream)); color: var(--ink); }
-        a { color: inherit; text-decoration: none; }
-        .shell { display: flex; min-height: 100vh; }
+
+        html, body {
+          font-family: "Nunito", sans-serif;
+          background: #fdf5f7;
+          color: var(--text-dark);
+          min-height: 100vh;
+        }
+
+        a {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        ul, li {
+          list-style: none;
+        }
+
+        /* ── Layout Shell ────────────────────────────────────────────── */
+        .shell {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          min-height: 100vh;
+          gap: 0;
+        }
+
+        /* ── Sidebar ──────────────────────────────────────────────────── */
         .sidebar {
-            width: var(--sidebar); background: rgba(255,255,255,.92); backdrop-filter: blur(10px);
-            border-right: 1px solid var(--line); padding: 22px 16px; display: flex; flex-direction: column; gap: 18px;
+          background: #fff;
+          border-right: 1.5px solid var(--pink-mid);
+          padding: 24px 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          overflow-y: auto;
         }
-        .brand, .profile, .panel, .stat, .table-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-        .brand { display: flex; align-items: center; gap: 12px; padding: 14px; }
-        .brand-icon { width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; overflow: hidden; }
-        .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
-        .brand-title { font-family: 'Playfair Display', serif; font-size: 18px; }
-        .brand-sub { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-        .profile { padding: 16px; display: flex; gap: 12px; align-items: center; }
-        .avatar { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; overflow: hidden; }
-        .avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .profile small { display: inline-block; margin-top: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; color: var(--gold-deep); background: var(--soft); border: 1px solid var(--line); }
-        .nav { display: flex; flex-direction: column; gap: 8px; }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .brand-icon {
+          width: 52px;
+          height: 52px;
+          background: var(--pink-light);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 24px;
+          line-height: 1;
+          flex-shrink: 0;
+        }
+
+        .brand-icon img {
+          width: 70%;
+          height: 70%;
+          object-fit: contain;
+        }
+
+        .brand-title {
+          font-family: "Playfair Display", serif;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--pink-accent);
+        }
+
+        .brand-sub {
+          font-size: 12px;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+
+        .profile {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px;
+          background: var(--pink-light);
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+        }
+
+        .avatar {
+          width: 48px;
+          height: 48px;
+          background: var(--pink-accent);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          font-weight: 700;
+          font-size: 18px;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+
+        .avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .profile > div {
+          min-width: 0;
+        }
+
+        .profile div:first-child {
+          font-weight: 800;
+          font-size: 14px;
+          color: var(--text-dark);
+        }
+
+        .profile small {
+          font-size: 12px;
+          color: var(--text-muted);
+        }
+
+        .nav {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          flex: 1;
+        }
+
         .nav a {
-            padding: 13px 14px; border-radius: 14px; font-weight: 700; color: var(--muted);
-            border: 1px solid transparent; transition: .18s ease;
+          padding: 12px 14px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-mid);
+          transition: all 0.2s;
+          border-left: 3px solid transparent;
         }
-        .nav a:hover, .nav a.active { background: var(--soft); border-color: var(--line); color: var(--ink); transform: translateX(2px); }
-        .main { flex: 1; min-width: 0; padding: 26px; display: flex; flex-direction: column; gap: 22px; }
+
+        .nav a:hover {
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          border-left-color: var(--pink-accent);
+        }
+
+        .nav a.active {
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          border-left-color: var(--pink-accent);
+        }
+
+        /* ── Main Content ────────────────────────────────────────────── */
+        .main {
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+          overflow-y: auto;
+        }
+
+        /* ── Hero Section ────────────────────────────────────────────── */
         .hero {
-            background: linear-gradient(135deg, rgba(212,162,76,.18), rgba(255,255,255,.94));
-            border: 1px solid var(--line); border-radius: 26px; padding: 28px; box-shadow: var(--shadow);
-            display: flex; justify-content: space-between; gap: 18px; align-items: center;
+          background: linear-gradient(135deg, #fce8ee 0%, #fdf5f7 60%, #fce8ee 100%);
+          border-radius: var(--radius);
+          padding: 28px;
+          border: 1.5px solid var(--pink-mid);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 20px;
         }
-        .hero h1 { font-family: 'Playfair Display', serif; font-size: 34px; margin-bottom: 8px; }
-        .hero p { color: var(--muted); max-width: 760px; line-height: 1.6; }
-        .hero-badges { display: flex; gap: 10px; flex-wrap: wrap; }
-        .hero-badges span { padding: 10px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-weight: 800; font-size: 13px; }
-        .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
-        .stat { padding: 18px; }
-        .stat .kicker { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-        .stat .value { margin-top: 8px; font-size: 28px; font-weight: 900; }
-        .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
-        .table-card { overflow: hidden; }
-        .card-head { padding: 16px 18px; border-bottom: 1px solid var(--line); background: #fffdf9; display: flex; justify-content: space-between; align-items: center; }
-        .card-head h2 { font-size: 16px; }
-        .card-head a { color: var(--gold-deep); font-weight: 800; font-size: 13px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 14px 18px; text-align: left; border-bottom: 1px solid #f2e7d3; font-size: 13px; vertical-align: top; }
-        th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-        .role { display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-size: 11px; font-weight: 800; }
-        .empty { padding: 22px 18px; color: var(--muted); }
-        @media (max-width: 1180px) { .stats { grid-template-columns: repeat(2, 1fr); } .grid { grid-template-columns: 1fr; } }
-        @media (max-width: 840px) {
-            .shell { flex-direction: column; }
-            .sidebar { width: 100%; }
-            .hero { flex-direction: column; align-items: flex-start; }
-            .stats { grid-template-columns: 1fr; }
-            .main { padding: 18px; }
+
+        .hero h1 {
+          font-family: "Playfair Display", serif;
+          font-size: 28px;
+          font-weight: 700;
+          color: var(--pink-dark);
+          margin-bottom: 8px;
+        }
+
+        .hero p {
+          font-size: 14px;
+          color: var(--text-mid);
+          line-height: 1.6;
+        }
+
+        .hero-badges {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 180px;
+        }
+
+        .hero-badges span {
+          background: #fff;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--pink-accent);
+          text-align: right;
+        }
+
+        /* ── Stats Grid ──────────────────────────────────────────────– */
+        .stats {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 16px;
+        }
+
+        @media (max-width: 1200px) {
+          .stats {
+            grid-template-columns: repeat(3, 1fr);
+          }
+        }
+
+        @media (max-width: 700px) {
+          .stats {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        .stat {
+          background: #fff;
+          border-radius: var(--radius);
+          padding: 18px;
+          border: 1.5px solid var(--pink-mid);
+          box-shadow: var(--shadow);
+          text-align: center;
+        }
+
+        .stat .kicker {
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 8px;
+        }
+
+        .stat .value {
+          font-size: 24px;
+          font-weight: 800;
+          color: var(--pink-accent);
+        }
+
+        /* ── Grid Layout ──────────────────────────────────────────────– */
+        .grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+        }
+
+        @media (max-width: 1000px) {
+          .grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* ── Cards ───────────────────────────────────────────────────── */
+        .table-card {
+          background: #fff;
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+          box-shadow: var(--shadow);
+          padding: 22px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .card-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1.5px solid var(--pink-mid);
+          padding-bottom: 14px;
+        }
+
+        .card-head h2 {
+          font-family: "Playfair Display", serif;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-dark);
+        }
+
+        .card-head a {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--pink-accent);
+          padding: 8px 14px;
+          background: var(--pink-light);
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
+          transition: all 0.2s;
+        }
+
+        .card-head a:hover {
+          background: var(--pink-accent);
+          color: #fff;
+          border-color: var(--pink-accent);
+        }
+
+        /* ── Table Styles ────────────────────────────────────────────– */
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        table thead th {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-muted);
+          text-align: left;
+          padding: 12px 0;
+          border-bottom: 1.5px solid var(--pink-mid);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        table tbody tr {
+          border-bottom: 1px solid #f0f0f0;
+          transition: background 0.2s;
+        }
+
+        table tbody tr:hover {
+          background: var(--pink-light);
+        }
+
+        table tbody td {
+          padding: 14px 0;
+          font-size: 13px;
+          color: var(--text-dark);
+        }
+
+        table tbody td strong {
+          font-weight: 700;
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        table tbody td span {
+          display: inline-block;
+        }
+
+        .role {
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: capitalize;
+        }
+
+        .empty {
+          text-align: center;
+          padding: 32px;
+          color: var(--text-muted);
+          font-size: 14px;
+        }
+
+        /* ── Scrollbar ───────────────────────────────────────────────– */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: var(--pink-mid);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: var(--pink-accent);
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────– */
+        @media (max-width: 768px) {
+          .shell {
+            grid-template-columns: 1fr;
+          }
+
+          .sidebar {
+            height: auto;
+            position: static;
+            border-right: none;
+            border-bottom: 1.5px solid var(--pink-mid);
+            padding: 14px;
+          }
+
+          .main {
+            padding: 14px;
+          }
+
+          .hero {
+            flex-direction: column;
+          }
+
+          .hero-badges {
+            flex-direction: row;
+            min-width: auto;
+          }
+
+          .hero-badges span {
+            text-align: center;
+            flex: 1;
+          }
         }
     </style>
 </head>

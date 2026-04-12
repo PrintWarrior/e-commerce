@@ -78,8 +78,7 @@ if (isset($_POST['request_deletion'])) {
         
         $message = "User {$user['username']} ({$user['email']}) has requested account deletion. Reason: $reason";
         foreach ($admins as $admin_id) {
-            $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'deletion_request')");
-            $stmt->execute([$admin_id, $message]);
+            createNotification($admin_id, $message, 'deletion_request');
         }
         
         $success = "Your account deletion request has been submitted. An admin will review it shortly.";
@@ -228,7 +227,7 @@ if (isset($_POST['cancel_deletion'])) {
             <h2 class="section-heading">Delete Account</h2>
 
             <p class="delete-note">
-                Deleted accounts are reviewed by the admin and can be restored within 60 days.
+                Deletion requests are reviewed by the admin. If approved, your account will be deleted immediately.
             </p>
 
             <?php if (!$pending_request): ?>

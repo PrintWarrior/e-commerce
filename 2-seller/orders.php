@@ -22,14 +22,10 @@ if (isset($_POST['update_status'])) {
                 UPDATE orders o
                 JOIN order_items oi ON oi.order_id = o.id
                 JOIN products p ON p.id = oi.product_id
-                SET o.status = ?,
-                    o.payment_status = CASE
-                        WHEN ? = 'completed' THEN 'paid'
-                        ELSE o.payment_status
-                    END
+                SET o.status = ?
                 WHERE o.id = ? AND p.seller_id = ?
             ");
-            $stmt->execute([$new_status, $new_status, $order_id, $seller_id]);
+            $stmt->execute([$new_status, $order_id, $seller_id]);
 
             if ($stmt->rowCount() === 0) {
                 throw new RuntimeException('Order not found or not assigned to this seller.');
@@ -37,12 +33,12 @@ if (isset($_POST['update_status'])) {
 
             if ($new_status === 'completed') {
                 $getOrder = $pdo->prepare("
-                    SELECT o.total_amount, p.seller_id
+                    SELECT p.seller_id, SUM(oi.quantity * oi.price) AS seller_total
                     FROM orders o
                     JOIN order_items oi ON o.id = oi.order_id
                     JOIN products p ON oi.product_id = p.id
                     WHERE o.id = ? AND p.seller_id = ?
-                    LIMIT 1
+                    GROUP BY p.seller_id
                 ");
                 $getOrder->execute([$order_id, $seller_id]);
                 $orderData = $getOrder->fetch();
@@ -56,7 +52,7 @@ if (isset($_POST['update_status'])) {
                             INSERT INTO seller_earnings (seller_id, order_id, amount, status)
                             VALUES (?, ?, ?, 'paid')
                         ");
-                        $insert->execute([$orderData['seller_id'], $order_id, $orderData['total_amount']]);
+                        $insert->execute([$orderData['seller_id'], $order_id, $orderData['seller_total']]);
                     }
                 }
             }
@@ -137,10 +133,10 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
         <div class="page-content">
 
             <?php if ($success): ?>
-                <div class="alert alert-success">âœ“ <?= htmlspecialchars($success) ?></div>
+                <div class="alert alert-success"> <?= htmlspecialchars($success) ?></div>
             <?php endif; ?>
             <?php if ($error): ?>
-                <div class="alert alert-error">âš  <?= htmlspecialchars($error) ?></div>
+                <div class="alert alert-error">  <?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
             <!-- Filters bar -->
@@ -173,7 +169,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                         <input type="hidden" name="status" value="<?= htmlspecialchars($status_filter) ?>">
                     <?php endif; ?>
                     <input type="text" name="search"
-                           placeholder="Search by order # or customerâ€¦"
+                           placeholder="Search by order # or customer"
                            value="<?= htmlspecialchars($search) ?>">
                     <button type="submit">Search</button>
                 </form>
@@ -183,7 +179,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
             <div class="orders-list">
                 <?php if (empty($orders)): ?>
                     <div class="empty-orders">
-                        <div class="empty-icon">ðŸ“¦</div>
+                        <div class="empty-icon"> </div>
                         <h3>No orders found</h3>
                         <p>
                             <?= $search
@@ -201,7 +197,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                         <div class="order-header">
                             <div class="order-meta">
                                 <h3>Order #<?= $order['id'] ?></h3>
-                                <p>Placed on <?= date('F j, Y Â· g:i A', strtotime($order['created_at'])) ?></p>
+                                <p>Placed on <?= date('F j, Y · g:i A', strtotime($order['created_at'])) ?></p>
                                 <p>Customer: <span class="customer-name"><?= htmlspecialchars($order['firstname'] . ' ' . $order['lastname']) ?></span></p>
                                 <p><?= htmlspecialchars($order['email']) ?></p>
                             </div>
@@ -210,7 +206,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                                     <?= ucfirst($order['status']) ?>
                                 </span>
                                 <span class="order-total-chip">
-                                    â‚±<?= number_format($order['total_amount'], 2) ?>
+                                    <?= number_format($order['total_amount'], 2) ?>
                                 </span>
                             </div>
                         </div>
@@ -231,15 +227,15 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                                     <tr>
                                         <td><?= htmlspecialchars($item['name']) ?></td>
                                         <td><?= $item['quantity'] ?></td>
-                                        <td>â‚±<?= number_format($item['price'], 2) ?></td>
-                                        <td>â‚±<?= number_format($item['quantity'] * $item['price'], 2) ?></td>
+                                        <td><?= number_format($item['price'], 2) ?></td>
+                                        <td><?= number_format($item['quantity'] * $item['price'], 2) ?></td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                                 <tfoot>
                                     <tr>
                                         <td colspan="3" class="total-label">Order Total</td>
-                                        <td class="total-amount">â‚±<?= number_format($order['total_amount'], 2) ?></td>
+                                        <td class="total-amount"><?= number_format($order['total_amount'], 2) ?></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -251,7 +247,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                                 <form method="post" class="status-form">
                                     <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
                                     <select name="status" required>
-                                        <option value="">Update statusâ€¦</option>
+                                        <option value="">Update status</option>
                                         <option value="pending"    <?= $order['status'] === 'pending'    ? 'selected' : '' ?>>Pending</option>
                                         <option value="processing" <?= $order['status'] === 'processing' ? 'selected' : '' ?>>Processing</option>
                                         <option value="shipped"    <?= $order['status'] === 'shipped'    ? 'selected' : '' ?>>Shipped</option>
@@ -262,7 +258,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                                 </form>
                             <?php else: ?>
                                 <span class="action-note">
-                                    This order is <?= $order['status'] === 'completed' ? 'âœ“ completed' : 'âœ• cancelled' ?> and cannot be modified.
+                                    This order is <?= $order['status'] === 'completed' ? '“ completed' : ' cancelled' ?> and cannot be modified.
                                 </span>
                             <?php endif; ?>
                         </div>
@@ -281,7 +277,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                 <div class="footer-socials">
                     <a href="#" title="Facebook">f</a>
                     <a href="#" title="Twitter">t</a>
-                    <a href="#" title="Website">ðŸŒ</a>
+                    <a href="#" title="Website"> </a>
                     <a href="#" title="LinkedIn">in</a>
                 </div>
             </div>

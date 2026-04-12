@@ -17,20 +17,25 @@ $status_labels = [
 // Handle shipping update (PRG pattern)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_shipping'])) {
     $order_id = (int) $_POST['order_id'];
-    $tracking_number = trim($_POST['tracking_number']);
-    $shipping_status = $_POST['shipping_status'];
+    $tracking_number = trim($_POST['tracking_number'] ?? '');
+    $shipping_status = $_POST['shipping_status'] ?? '';
+    $allowed_shipping_statuses = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
 
-    $stmt = $pdo->prepare("
-        UPDATE orders o
-        JOIN order_items oi ON o.id = oi.order_id
-        JOIN products p ON oi.product_id = p.id
-        SET o.tracking_number = ?, o.status = ?
-        WHERE o.id = ? AND p.seller_id = ?
-    ");
-    if ($stmt->execute([$tracking_number, $shipping_status, $order_id, $seller_id])) {
-        $_SESSION['flash_success'] = "Shipping info for Order #$order_id updated successfully!";
+    if (!in_array($shipping_status, $allowed_shipping_statuses, true)) {
+        $_SESSION['flash_error'] = "Invalid shipping status selected.";
     } else {
-        $_SESSION['flash_error'] = "Failed to update shipping information.";
+        $stmt = $pdo->prepare("
+            UPDATE orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN products p ON oi.product_id = p.id
+            SET o.tracking_number = ?, o.status = ?
+            WHERE o.id = ? AND p.seller_id = ?
+        ");
+        if ($stmt->execute([$tracking_number, $shipping_status, $order_id, $seller_id])) {
+            $_SESSION['flash_success'] = "Shipping info for Order #$order_id updated successfully!";
+        } else {
+            $_SESSION['flash_error'] = "Failed to update shipping information.";
+        }
     }
     header('Location: shipping.php');
     exit;
@@ -44,11 +49,16 @@ unset($_SESSION['flash_error']);
 // Fetch active shipping orders
 $stmt = $pdo->prepare("
     SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
-           c.default_shipping_address
+           a.barangay,
+           a.municipality,
+           a.province,
+           a.zip_code,
+           a.address_details
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     JOIN products p ON oi.product_id = p.id
     JOIN customers c ON o.customer_id = c.id
+    LEFT JOIN addresses a ON o.shipping_address_id = a.id
     JOIN users u ON c.user_id = u.id
     WHERE p.seller_id = ?
       AND o.status IN ('pending','processing','shipped','delivered')
@@ -58,7 +68,13 @@ $stmt->execute([$seller_id]);
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
-    $order['shipping_address'] = json_decode($order['default_shipping_address'] ?? '{}', true);
+    $order['shipping_address'] = [
+        'barangay' => $order['barangay'] ?? '',
+        'municipality' => $order['municipality'] ?? '',
+        'province' => $order['province'] ?? '',
+        'zip_code' => $order['zip_code'] ?? '',
+        'address_details' => $order['address_details'] ?? '',
+    ];
     $s = $pdo->prepare("
         SELECT oi.*, p.name, p.image
         FROM order_items oi
@@ -259,10 +275,15 @@ foreach (['pending', 'processing', 'shipped'] as $st) {
                                                 </div>
                                             </div>
                                             <div class="form-group">
-                                                <label>Shipping Status</label>
-                                                <h4>
-                                                    <?= $status_labels[$order['status']] ?? ucfirst($order['status']) ?>
-                                                </h4>
+                                                <label for="status_<?= $order['id'] ?>">Shipping Status</label>
+                                                <select id="status_<?= $order['id'] ?>" name="shipping_status" required>
+                                                    <option value="pending" <?= $order['status'] === 'pending' ? 'selected' : '' ?>>Pending</option>
+                                                    <option value="processing" <?= $order['status'] === 'processing' ? 'selected' : '' ?>>Processing</option>
+                                                    <option value="shipped" <?= $order['status'] === 'shipped' ? 'selected' : '' ?>>Shipped</option>
+                                                    <!--<option value="delivered" <?= $order['status'] === 'delivered' ? 'selected' : '' ?>>Delivered</option>
+                                                    <option value="completed" <?= $order['status'] === 'completed' ? 'selected' : '' ?>>Completed</option>
+                                                    <option value="cancelled" <?= $order['status'] === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>-->
+                                                </select>
                                             </div>
                                         </div>
                                         <button type="submit" name="update_shipping" class="btn-update">

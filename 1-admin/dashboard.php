@@ -47,7 +47,14 @@ $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email_verified=0");
 $stmt->execute(); $unverified = (int)$stmt->fetchColumn();
 
 // ── Unread notifications ──────────────────────────────────────
-$stmt = $pdo->prepare("SELECT n.*, u.username FROM notifications n JOIN users u ON n.user_id=u.id WHERE n.user_id=? AND n.is_read=0 ORDER BY n.created_at DESC");
+$stmt = $pdo->prepare("
+    SELECT n.*, nt.code AS type_code, nt.label AS type_label, u.username
+    FROM notifications n
+    LEFT JOIN notification_types nt ON n.notification_type_id = nt.id
+    JOIN users u ON n.user_id=u.id
+    WHERE n.user_id=? AND n.is_read=0
+    ORDER BY n.created_at DESC
+");
 $stmt->execute([$_SESSION['user_id']]);
 $notifications  = $stmt->fetchAll();
 $unread_count   = count($notifications);
@@ -70,17 +77,6 @@ $stmt->execute(); $recent_users = $stmt->fetchAll();
 
 $current_page = basename($_SERVER['PHP_SELF']);
 
-// notification type meta
-function notif_meta_admin(string $type): array {
-    return match($type) {
-        'order'              => ['icon'=>'📦','color'=>'#2255cc','bg'=>'#dce8ff'],
-        'new_user'           => ['icon'=>'👤','color'=>'#c75473','bg'=>'#fce8ee'],
-        'deletion_request'   => ['icon'=>'⚠️','color'=>'#c0303a','bg'=>'#fdecea'],
-        'seller_application' => ['icon'=>'📝','color'=>'#7322cc','bg'=>'#f3e0ff'],
-        'payout'             => ['icon'=>'💰','color'=>'#1a7f4b','bg'=>'#d1f5e0'],
-        default              => ['icon'=>'🔔','color'=>'#856404','bg'=>'#fff3cd'],
-    };
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,16 +145,17 @@ function notif_meta_admin(string $type): array {
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
-                <span class="ni">📝</span> About Menu
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
             </a>
 
             <div class="nav-lbl">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
                 <span class="ni">👤</span> My Profile
             </a>
-            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
-                <span class="ni">⚙️</span> System Logs
+            
+            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
+                <span class="ni">📝</span> About Menu
             </a>
             <a href="../logout.php" class="logout">
                 <span class="ni">🚪</span> Logout
@@ -249,7 +246,7 @@ function notif_meta_admin(string $type): array {
                             <p class="empty-state">No unread notifications ✓</p>
                         <?php else: ?>
                             <?php foreach ($notifications as $n):
-                                $m = notif_meta_admin($n['type']);
+                                $m = getNotificationMeta(getNotificationCode($n));
                             ?>
                             <div class="notif-item">
                                 <div class="notif-bubble" style="background:<?= $m['bg'] ?>;border:1.5px solid <?= $m['color'] ?>33;">

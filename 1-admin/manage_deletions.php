@@ -34,27 +34,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $stmt->execute([$request_id]); $req = $stmt->fetch();
         if (!$req) throw new Exception("Request not found.");
 
-        $pdo->prepare("UPDATE deletion_requests SET status=?, admin_notes=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?")
-            ->execute([$status, $admin_notes, $admin_id, $request_id]);
-
         $stmt = $pdo->prepare("SELECT u.*, CASE WHEN a.id IS NOT NULL THEN 'Admin' WHEN s.id IS NOT NULL THEN 'Seller' WHEN c.id IS NOT NULL THEN 'Customer' ELSE 'User' END AS user_role FROM users u LEFT JOIN admins a ON u.id=a.user_id LEFT JOIN sellers s ON u.id=s.user_id LEFT JOIN customers c ON u.id=c.user_id WHERE u.id=?");
         $stmt->execute([$req['user_id']]); $user = $stmt->fetch();
+        if (!$user) throw new Exception("User not found.");
 
         if ($status === 'approved') {
+            $pdo->prepare("UPDATE deletion_requests SET status=?, admin_notes=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?")
+                ->execute([$status, $admin_notes, $admin_id, $request_id]);
             sendEmail($user['email'], "Account Deletion Request Approved",
-                "<p>Dear {$user['firstname']},</p><p>Your account deletion request has been <strong>approved</strong>. Your account will be permanently deleted within 24 hours.</p>");
-            $pdo->prepare("UPDATE users SET marked_for_deletion=1, deleted_at=NOW() WHERE id=?")
-                ->execute([$req['user_id']]);
+                "<p>Dear {$user['firstname']},</p><p>Your account deletion request has been <strong>approved</strong>. Your account has now been permanently deleted.</p>");
+            $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$req['user_id']]);
         } else {
+            $pdo->prepare("UPDATE deletion_requests SET status=?, admin_notes=?, reviewed_by=?, reviewed_at=NOW() WHERE id=?")
+                ->execute([$status, $admin_notes, $admin_id, $request_id]);
             sendEmail($user['email'], "Account Deletion Request Declined",
                 "<p>Dear {$user['firstname']},</p><p>Your deletion request was <strong>declined</strong>. Reason: " . htmlspecialchars($admin_notes) . "</p>");
         }
 
-        $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?,?,'deletion_request')")
-            ->execute([$_SESSION['user_id'], "Deletion request #$request_id $status for {$user['username']}."]);
+        createNotification($_SESSION['user_id'], "Deletion request #$request_id $status for {$user['username']}.", 'deletion_request');
 
         $pdo->commit();
-        $_SESSION['flash_success'] = "Request #$request_id has been " . ($status === 'approved' ? 'approved' : 'declined') . ".";
+        $_SESSION['flash_success'] = $status === 'approved'
+            ? "Request #$request_id approved and the account was deleted immediately."
+            : "Request #$request_id has been declined.";
         header('Location: manage_deletions.php'); exit;
 
     } catch (Exception $e) {
@@ -136,10 +138,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="about.php"           class="<?= $current_page==='about.php'?'active':'' ?>"><span class="ni">📝</span> About Menu</a>
+            
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
+            </a>
 
             <div class="nav-lbl">Account</div>
             <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>"><span class="ni">👤</span> My Profile</a>
+            <a href="about.php"           class="<?= $current_page==='about.php'?'active':'' ?>"><span class="ni">📝</span> About Menu</a>
             <a href="../logout.php" class="logout"><span class="ni">🚪</span> Logout</a>
         </nav>
     </aside>
@@ -197,7 +203,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <strong>Action required:</strong> There <?= count($pending) === 1 ? 'is' : 'are' ?>
                     <strong><?= count($pending) ?></strong> pending deletion
                     request<?= count($pending) !== 1 ? 's' : '' ?> awaiting your review.
-                    Approved requests will mark the user's account for permanent deletion within 24 hours.
+                    Approved requests will permanently delete the user's account immediately.
                 </div>
             </div>
             <?php endif; ?>
@@ -264,7 +270,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                             </div>
                             <div class="btn-group">
                                 <button type="submit" name="action" value="approve" class="btn-approve"
-                                        onclick="return confirm('⚠️ Approve this deletion request?\n\nThe user\'s account will be marked for permanent deletion within 24 hours.\n\nThis action cannot be easily undone. Continue?')">
+                                        onclick="return confirm('⚠️ Approve this deletion request?\n\nThe user\'s account will be deleted immediately.\n\nThis action cannot be undone. Continue?')">
                                     ✅ Approve Deletion
                                 </button>
                                 <button type="submit" name="action" value="decline" class="btn-decline"

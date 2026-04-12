@@ -48,8 +48,7 @@ if (isset($_POST['send_verification'])) {
             
             // Log the action
             $log_message = "Verification email resent to {$user['username']} ({$email}) by admin";
-            $stmt = $pdo->prepare("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'system')");
-            $stmt->execute([$_SESSION['user_id'], $log_message]);
+            createNotification($_SESSION['user_id'], $log_message, 'system');
         } else {
             $error = "Failed to send verification email.";
         }
@@ -87,7 +86,7 @@ $filter = $_GET['filter'] ?? 'all';
 $search = $_GET['search'] ?? '';
 
 // Build notifications query
-$query = "SELECT n.*, u.username FROM notifications n JOIN users u ON n.user_id = u.id WHERE n.user_id = ?";
+$query = "SELECT n.*, nt.code AS type_code, nt.label AS type_label, u.username FROM notifications n LEFT JOIN notification_types nt ON n.notification_type_id = nt.id JOIN users u ON n.user_id = u.id WHERE n.user_id = ?";
 $params = [$_SESSION['user_id']];
 
 if ($filter == 'unread') {
@@ -97,8 +96,9 @@ if ($filter == 'unread') {
 }
 
 if ($search) {
-    $query .= " AND (n.message LIKE ? OR n.type LIKE ?)";
+    $query .= " AND (n.message LIKE ? OR nt.code LIKE ? OR nt.label LIKE ?)";
     $search_param = "%$search%";
+    $params[] = $search_param;
     $params[] = $search_param;
     $params[] = $search_param;
 }
@@ -197,9 +197,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="nav-lbl">Management</div>
             <a href="manage_deletions.php">🗑️ Deletion Requests</a>
             <a href="notifications.php" class="active">🔔 Notifications</a>
-            <a href="about.php">📝 About Menu</a>
+            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+                <span class="ni">⚙️</span> System Logs
+            </a>
+            
             <div class="nav-lbl">Account</div>
             <a href="profile.php">👤 My Profile</a>
+            <a href="about.php">📝 About Menu</a>
             <a href="../logout.php" class="logout">🚪 Logout</a>
         </nav>
     </aside>
@@ -267,7 +271,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <?php foreach ($notifications as $notif): ?>
                             <div class="notification-item <?= $notif['is_read'] ? 'read' : 'unread' ?>">
                                 <div class="notification-icon">
-                                    <?= $notif['type'] == 'new_user' ? '👤' : ($notif['type'] == 'seller_application' ? '📝' : ($notif['type'] == 'deletion_request' ? '⚠️' : '🔔')) ?>
+                                    <?= htmlspecialchars(getNotificationMeta(getNotificationCode($notif))['icon']) ?>
                                 </div>
                                 <div class="notification-content">
                                     <div class="notification-message"><?= htmlspecialchars($notif['message']) ?></div>

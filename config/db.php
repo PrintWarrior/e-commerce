@@ -2,7 +2,7 @@
 session_start();
 
 $host = 'localhost';
-$dbname = 'e_commerce';
+$dbname = 'beauty_mart';
 $username = 'root'; // Change as needed
 $password = '';     // Change as needed
 

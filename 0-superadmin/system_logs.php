@@ -70,164 +70,320 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <title>System Logs | Beauty Mart Superadmin</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* ── Reset & Base ─────────────────────────────────────────────── */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
         :root {
-            --bg: #fff8f8;
-            --card: #ffffff;
-            --text: #30212e;
-            --muted: #786474;
-            --accent: #d14d72;
-            --accent-dark: #b33c5e;
-            --line: #f0d9e0;
-            --shadow: 0 20px 45px rgba(87, 32, 54, 0.08);
+          --pink-light: #fce8ee;
+          --pink-mid: #f9d0dc;
+          --pink-accent: #e8728e;
+          --pink-dark: #c75473;
+          --text-dark: #2e2e2e;
+          --text-mid: #555;
+          --text-muted: #888;
+          --white: #ffffff;
+          --radius: 14px;
+          --shadow: 0 4px 18px rgba(200, 80, 110, 0.12);
         }
 
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            font-family: 'Nunito', sans-serif;
-            color: var(--text);
-            background:
-                radial-gradient(circle at top left, rgba(209, 77, 114, 0.13), transparent 30%),
-                linear-gradient(180deg, #fff9fb 0%, #fff4f4 100%);
+        html, body {
+          font-family: "Nunito", sans-serif;
+          background: #fdf5f7;
+          color: var(--text-dark);
+          min-height: 100vh;
         }
 
+        a {
+          text-decoration: none;
+          color: inherit;
+        }
+
+        ul, li {
+          list-style: none;
+        }
+
+        /* ── Layout Shell ────────────────────────────────────────────── */
         .shell {
-            min-height: 100vh;
-            padding: 32px;
+          display: flex;
+          min-height: 100vh;
         }
 
         .page {
-            max-width: 1280px;
-            margin: 0 auto;
+          flex: 1;
+          padding: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 28px;
+          overflow-y: auto;
         }
 
+        /* ── Topbar ──────────────────────────────────────────────────── */
         .topbar {
-            display: flex;
-            justify-content: space-between;
-            gap: 20px;
-            align-items: center;
-            margin-bottom: 24px;
+          background: linear-gradient(135deg, #fce8ee 0%, #fdf5f7 60%, #fce8ee 100%);
+          border-radius: var(--radius);
+          padding: 28px;
+          border: 1.5px solid var(--pink-mid);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 20px;
         }
 
         .topbar h1 {
-            margin: 0;
-            font-family: 'Playfair Display', serif;
-            font-size: 2rem;
+          font-family: "Playfair Display", serif;
+          font-size: 28px;
+          font-weight: 700;
+          color: var(--pink-dark);
+          margin-bottom: 8px;
         }
 
         .topbar p {
-            margin: 6px 0 0;
-            color: var(--muted);
+          font-size: 14px;
+          color: var(--text-mid);
+          line-height: 1.6;
         }
 
         .top-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 180px;
         }
 
-        .pill, .back-link {
-            text-decoration: none;
-            color: var(--text);
-            background: rgba(255,255,255,0.92);
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            padding: 10px 16px;
-            font-weight: 800;
-            box-shadow: var(--shadow);
+        /* ── Pills/Badges ────────────────────────────────────────────– */
+        .pill {
+          background: #fff;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--pink-accent);
+          text-align: right;
         }
 
         .back-link {
-            color: #fff;
-            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-            border: none;
+          background: var(--pink-light);
+          color: var(--pink-accent);
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1.5px solid var(--pink-mid);
+          font-size: 12px;
+          font-weight: 700;
+          transition: all 0.2s;
+          text-align: center;
         }
 
+        .back-link:hover {
+          background: var(--pink-mid);
+          border-color: var(--pink-accent);
+        }
+
+        /* ── Cards ───────────────────────────────────────────────────── */
         .card {
-            background: var(--card);
-            border: 1px solid rgba(209, 77, 114, 0.12);
-            border-radius: 24px;
-            box-shadow: var(--shadow);
-            overflow: hidden;
+          background: #fff;
+          border-radius: var(--radius);
+          border: 1.5px solid var(--pink-mid);
+          box-shadow: var(--shadow);
+          overflow: hidden;
         }
 
+        /* ── Filters ──────────────────────────────────────────────────– */
         .filters {
-            display: grid;
-            grid-template-columns: 1.5fr 1fr auto;
-            gap: 16px;
-            padding: 24px;
-            border-bottom: 1px solid var(--line);
+          display: grid;
+          grid-template-columns: 2fr 1fr auto;
+          gap: 14px;
+          align-items: end;
+          padding: 22px;
+          border-bottom: 1.5px solid var(--pink-mid);
         }
 
-        .field label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 0.92rem;
-            font-weight: 800;
+        .field {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
         }
 
-        .field input,
-        .field select {
-            width: 100%;
-            padding: 12px 14px;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            font: inherit;
-            background: #fff;
+        label {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--text-dark);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
+        input,
+        select {
+          padding: 12px 14px;
+          border: 1.5px solid var(--pink-mid);
+          border-radius: 10px;
+          font-family: "Nunito", sans-serif;
+          font-size: 14px;
+          color: var(--text-dark);
+          background: #fdf5f7;
+          outline: none;
+          transition: border-color 0.2s;
+        }
+
+        input:focus,
+        select:focus {
+          border-color: var(--pink-accent);
+          background: #fff;
+        }
+
+        /* ── Buttons ──────────────────────────────────────────────────– */
         .filter-btn {
-            align-self: end;
-            border: none;
-            border-radius: 14px;
-            padding: 12px 20px;
-            font: inherit;
-            font-weight: 800;
-            color: #fff;
-            cursor: pointer;
-            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 12px 18px;
+          border-radius: 10px;
+          border: none;
+          background: var(--pink-accent);
+          color: #fff;
+          cursor: pointer;
+          font: inherit;
+          font-weight: 700;
+          transition: all 0.2s;
+          min-width: 120px;
         }
 
+        .filter-btn:hover {
+          background: var(--pink-dark);
+        }
+
+        /* ── Table Styles ────────────────────────────────────────────– */
         .table-wrap {
-            overflow-x: auto;
+          overflow-x: auto;
         }
 
         table {
-            width: 100%;
-            border-collapse: collapse;
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
         }
 
-        th, td {
-            padding: 16px 18px;
-            text-align: left;
-            border-bottom: 1px solid var(--line);
-            vertical-align: top;
+        table thead th {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--text-muted);
+          text-align: left;
+          padding: 14px 12px;
+          border-bottom: 1.5px solid var(--pink-mid);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
-        th {
-            font-size: 0.85rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--muted);
-            background: #fffafb;
+        table tbody tr {
+          border-bottom: 1px solid #f0f0f0;
+          transition: background 0.2s;
+        }
+
+        table tbody tr:hover {
+          background: var(--pink-light);
+        }
+
+        table tbody td {
+          padding: 14px 12px;
+          color: var(--text-dark);
         }
 
         .meta {
-            color: var(--muted);
-            font-size: 0.92rem;
+          font-size: 12px;
+          color: var(--text-muted);
+          margin-top: 2px;
         }
 
+        /* ── Empty State ──────────────────────────────────────────────– */
         .empty {
-            padding: 48px 24px;
-            text-align: center;
-            color: var(--muted);
+          padding: 32px;
+          text-align: center;
+          color: var(--text-muted);
         }
 
-        @media (max-width: 900px) {
-            .shell { padding: 18px; }
-            .topbar { flex-direction: column; align-items: flex-start; }
-            .filters { grid-template-columns: 1fr; }
+        /* ── Scrollbar ───────────────────────────────────────────────– */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: var(--pink-mid);
+          border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+          background: var(--pink-accent);
+        }
+
+        /* ── Responsive ──────────────────────────────────────────────– */
+        @media (max-width: 1000px) {
+          .topbar {
+            flex-direction: column;
+          }
+
+          .top-actions {
+            flex-direction: row;
+            min-width: auto;
+            width: 100%;
+          }
+
+          .pill,
+          .back-link {
+            flex: 1;
+            text-align: center;
+          }
+
+          .filters {
+            grid-template-columns: 1fr;
+          }
+
+          .filter-btn {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .page {
+            padding: 14px;
+          }
+
+          .topbar {
+            padding: 18px;
+          }
+
+          .topbar h1 {
+            font-size: 22px;
+          }
+
+          .filters {
+            grid-template-columns: 1fr;
+            padding: 14px;
+          }
+
+          .filter-btn {
+            width: 100%;
+          }
+
+          table thead th {
+            font-size: 11px;
+            padding: 10px 8px;
+          }
+
+          table tbody td {
+            padding: 10px 8px;
+            font-size: 12px;
+          }
         }
     </style>
 </head>
@@ -251,7 +407,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <form method="get" class="filters">
                     <div class="field">
                         <label for="search">Search</label>
-                        <input id="search" type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Description, table, action, or user">
+                        <input id="search" type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Description, action, or user">
                     </div>
                     <div class="field">
                         <label for="action">Action</label>
@@ -277,10 +433,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                     <th>Date</th>
                                     <th>User</th>
                                     <th>Action</th>
-                                    <th>Table</th>
-                                    <th>Record</th>
+                                    <!--<th>Table</th>
+                                    <th>Record</th>-->
                                     <th>Description</th>
-                                    <th>IP Address</th>
+                                    <!--<th>IP Address</th>-->
                                 </tr>
                             </thead>
                             <tbody>
@@ -300,10 +456,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                             </div>
                                         </td>
                                         <td><?= htmlspecialchars($log['action']) ?></td>
-                                        <td><?= htmlspecialchars($log['table_name'] ?? '-') ?></td>
-                                        <td><?= $log['record_id'] !== null ? (int) $log['record_id'] : '-' ?></td>
+                                        <!--<td><?= htmlspecialchars($log['table_name'] ?? '-') ?></td>
+                                        <td><?= $log['record_id'] !== null ? (int) $log['record_id'] : '-' ?></td>-->
                                         <td><?= nl2br(htmlspecialchars($log['description'] ?? '-')) ?></td>
-                                        <td><?= htmlspecialchars($log['ip_address'] ?? '-') ?></td>
+                                        <!--<td><?= htmlspecialchars($log['ip_address'] ?? '-') ?></td>-->
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

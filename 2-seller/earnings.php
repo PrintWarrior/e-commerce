@@ -27,10 +27,11 @@ $payout_summary_stmt = $pdo->prepare("
 if (isset($_POST['request_payout'])) {
     $amount         = floatval($_POST['amount']);
     $payment_method = trim($_POST['payment_method']);
+    $payment_method_id = getPaymentMethodId($payment_method);
 
     if ($amount <= 0) {
         $error = "Please enter a valid amount.";
-    } elseif (empty($payment_method)) {
+    } elseif ($payment_method_id === null) {
         $error = "Please select a payment method.";
     } else {
         $earnings_stmt->execute([$seller_id]);
@@ -51,8 +52,8 @@ if (isset($_POST['request_payout'])) {
         } elseif ($amount > $available_balance) {
             $error = "Insufficient balance. Available: ₱" . number_format($available_balance, 2);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO seller_payouts (seller_id, amount, payment_method, status) VALUES (?, ?, ?, 'pending')");
-            if ($stmt->execute([$seller_id, $amount, $payment_method])) {
+            $stmt = $pdo->prepare("INSERT INTO seller_payouts (seller_id, amount, payment_method_id, status) VALUES (?, ?, ?, 'pending')");
+            if ($stmt->execute([$seller_id, $amount, $payment_method_id])) {
                 foreach (getAdminIds() as $admin_user_id) {
                     createNotification(
                         $admin_user_id,
@@ -109,7 +110,13 @@ $stmt->execute([$seller_id]);
 $transactions = $stmt->fetchAll();
 
 // Payout history
-$stmt = $pdo->prepare("SELECT * FROM seller_payouts WHERE seller_id = ? ORDER BY requested_at DESC");
+$stmt = $pdo->prepare("
+    SELECT sp.*, pm.name AS payment_method_name
+    FROM seller_payouts sp
+    LEFT JOIN payment_methods pm ON sp.payment_method_id = pm.id
+    WHERE sp.seller_id = ?
+    ORDER BY sp.requested_at DESC
+");
 $stmt->execute([$seller_id]);
 $payouts = $stmt->fetchAll();
 
@@ -235,7 +242,7 @@ $chart_data     = array_map('floatval', array_column($monthly_earnings, 'monthly
                                         <span class="method-name">GCash</span>
                                     </label>
                                     <!--<label class="method-option">
-                                        <input type="radio" name="payment_method" value="paymaya">
+                                        <input type="radio" name="payment_method" value="maya">
                                         <span class="method-icon">ðŸ’œ</span>
                                         <span class="method-name">Maya (PayMaya)</span>
                                     </label>
@@ -332,7 +339,7 @@ $chart_data     = array_map('floatval', array_column($monthly_earnings, 'monthly
                                 <?php foreach ($payouts as $p): ?>
                                 <tr>
                                     <td class="amount-cell">₱<?= number_format($p['amount'], 2) ?></td>
-                                    <td><?= ucfirst(str_replace('_', ' ', $p['payment_method'])) ?></td>
+                                    <td><?= htmlspecialchars($p['payment_method_name'] ?? 'N/A') ?></td>
                                     <td>
                                         <span class="badge badge-<?= $p['status'] ?>">
                                             <?= ucfirst($p['status']) ?>

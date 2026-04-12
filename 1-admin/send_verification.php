@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     // Prepare email content
-    $verification_link = "http://" . $_SERVER['HTTP_HOST'] . "/verify.php?token=" . $token;
+    $verification_link = "http://" . $_SERVER['HTTP_HOST'] . "/lume%20and%20co/includes/verify.php?token=" . $token;
     
     $subject = "Email Verification - Beauty Mart";
     $body = "
@@ -127,11 +127,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (sendEmail($email, $subject, $body)) {
         // Log the action
         $log_message = "Verification email sent to {$user['username']} ({$email}) by admin " . $_SESSION['username'];
+        createNotification($_SESSION['user_id'], $log_message, 'system');
         $stmt = $pdo->prepare("
-            INSERT INTO notifications (user_id, message, type, is_read) 
-            VALUES (?, ?, 'system', 1)
+            UPDATE notifications
+            SET is_read = 1
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT 1
         ");
-        $stmt->execute([$_SESSION['user_id'], $log_message]);
+        $stmt->execute([$_SESSION['user_id']]);
         
         $_SESSION['flash_message'] = "Verification email has been sent to {$user['firstname']} {$user['lastname']} ({$email}).";
         $_SESSION['flash_type'] = "success";

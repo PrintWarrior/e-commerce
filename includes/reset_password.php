@@ -21,9 +21,9 @@ if (!$reset) {
     die("Token expired or invalid. Please <a href='forgot_password.php'>request a new password reset link</a>.");
 }
 
-// Get user details for the email
-$stmt = $pdo->prepare("SELECT id, firstname, username FROM users WHERE email = ?");
-$stmt->execute([$reset['email']]);
+// Get user details for the reset owner
+$stmt = $pdo->prepare("SELECT id, firstname, username, email FROM users WHERE id = ?");
+$stmt->execute([$reset['user_id']]);
 $user = $stmt->fetch();
 
 if (!$user) {
@@ -50,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt->execute([$token]);
             
             // Delete any other reset tokens for this email (cleanup)
-            $stmt = $pdo->prepare("DELETE FROM password_resets WHERE email = ? AND token != ?");
-            $stmt->execute([$reset['email'], $token]);
+            $stmt = $pdo->prepare("DELETE FROM password_resets WHERE user_id = ? AND token != ?");
+            $stmt->execute([$reset['user_id'], $token]);
             
             $success = "Password changed successfully! You can now <a href='login.php'>login with your new password</a>.";
             
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </body>
                 </html>
             ";
-            sendEmail($reset['email'], $subject, $body);
+            sendEmail($user['email'], $subject, $body);
         } else {
             $error = "Failed to update password. Please try again.";
         }
@@ -343,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
         
         <div class="back-link">
-            <a href="../login.php">← Back to Login</a>
+            <a href="../index.php">← Back to Login</a>
         </div>
     </div>
 

@@ -25,13 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $token = bin2hex(random_bytes(32));
             $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
             
-            // Delete any existing reset tokens for this email
-            $stmt = $pdo->prepare("DELETE FROM password_resets WHERE email = ?");
-            $stmt->execute([$email]);
+            // Delete any existing reset tokens for this user
+            $stmt = $pdo->prepare("DELETE FROM password_resets WHERE user_id = ?");
+            $stmt->execute([$user['id']]);
             
             // Insert new reset token
-            $stmt = $pdo->prepare("INSERT INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)");
-            if ($stmt->execute([$email, $token, $expires])) {
+            $stmt = $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)");
+            if ($stmt->execute([$user['id'], $token, $expires])) {
                 // Send password reset email
                 if (sendPasswordResetEmail($email, $token)) {
                     $success = "A password reset link has been sent to your email. Please check your inbox.";
@@ -216,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </form>
         
         <div class="back-link">
-            <a href="../login.php">← Back to Login</a>
+            <a href="../index.php">← Back to Login</a>
         </div>
         
         <div class="info-text">
