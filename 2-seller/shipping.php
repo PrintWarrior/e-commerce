@@ -105,6 +105,7 @@ foreach (['pending', 'processing', 'shipped'] as $st) {
         rel="stylesheet">
     <link rel="stylesheet" href="../css/seller_header.css">
     <link rel="stylesheet" href="../css/seller_shipping.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 
 <body>

@@ -56,6 +56,7 @@ $all_categories = $stmt->fetchAll();
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/index.css">
     <link rel="stylesheet" href="css/index_browse.css">
+    <link rel="stylesheet" href="css/responsive.css">
     <link rel="icon" type="image/png" href="images/logo.png">
 </head>
 <body>

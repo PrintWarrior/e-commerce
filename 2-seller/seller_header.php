@@ -51,9 +51,17 @@ $pending_orders = $stmt->fetchColumn();
 </head>
 <body>
 
-<div class="seller-wrapper">
-    <!-- Sidebar -->
-    <aside class="sidebar">
+ <div class="seller-wrapper">
+     <!-- Mobile Hamburger Toggle -->
+     <input type="checkbox" id="seller-menu-toggle" class="seller-menu-toggle">
+     <label for="seller-menu-toggle" class="seller-hamburger">
+         <span></span>
+         <span></span>
+         <span></span>
+     </label>
+
+     <!-- Sidebar -->
+     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
                 <img src="../images/logo.png" alt="Beauty Mart">

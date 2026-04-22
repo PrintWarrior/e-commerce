@@ -133,6 +133,7 @@ $chart_data     = array_map('floatval', array_column($monthly_earnings, 'monthly
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/seller_header.css">
     <link rel="stylesheet" href="../css/seller_earnings.css">
+    <link rel="stylesheet" href="../css/responsive.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>

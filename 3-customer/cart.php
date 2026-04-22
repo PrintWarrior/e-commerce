@@ -65,6 +65,7 @@ $grand_total = array_sum(array_map(fn($i) => $i['price'] * $i['quantity'], $cart
     <title>My Cart | Beauty Mart</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/customer_cart.css">
+    <link rel="stylesheet" href="../css/responsive.css">
     <link rel="icon" href="../images/logo.png" type="image/png">
 </head>
 <body>
@@ -114,9 +115,29 @@ $grand_total = array_sum(array_map(fn($i) => $i['price'] * $i['quantity'], $cart
             <div class="search-wrap">
                 <input type="text" placeholder="Search...">
                 <button type="button">Search</button>
-            </div>
+             </div>
+             
+             <!-- Hamburger Menu Toggle (hidden checkbox) -->
+             <input type="checkbox" id="menu-toggle">
+             
+             <!-- Hamburger Button -->
+             <label for="menu-toggle" class="hamburger">
+                 <span></span>
+                 <span></span>
+                 <span></span>
+             </label>
+             
+             <!-- Mobile Navigation Menu -->
+             <div class="nav-menu">
+                 <a href="products.php">Products</a>
+                 <a href="orders.php">Orders</a>
+                 <a href="wishlist.php">Wishlist</a>
+                 <a href="cart.php">Cart</a>
+                 <a href="profile.php">Profile</a>
+                 <a href="../logout.php">Logout</a>
+             </div>
 
-            <div class="nav-icons">
+             <div class="nav-icons">
                 <a href="dashboard.php" title="Home">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>

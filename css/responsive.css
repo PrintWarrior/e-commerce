@@ -1,0 +1,677 @@
+﻿/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE CSS - Mobile, Tablet, Desktop + Hamburger Menu (CSS-only)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── HAMBURGER MENU STYLES (CSS-only, no JavaScript) ─────────────────────── */
+
+/* Hidden checkbox for menu toggle */
+#menu-toggle {
+  display: none;
+}
+
+/* Hamburger button styles */
+.hamburger {
+  display: none;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+}
+
+.hamburger span {
+  width: 24px;
+  height: 2.5px;
+  background: var(--pink-accent);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  display: block;
+}
+
+/* Hamburger animation when menu is open */
+#menu-toggle:checked ~ .hamburger span:nth-child(1) {
+  transform: rotate(45deg) translate(8px, 8px);
+}
+
+#menu-toggle:checked ~ .hamburger span:nth-child(2) {
+  opacity: 0;
+}
+
+#menu-toggle:checked ~ .hamburger span:nth-child(3) {
+  transform: rotate(-45deg) translate(8px, -8px);
+}
+
+/* Mobile menu (nav-menu) */
+.nav-menu {
+  display: none;
+  flex-direction: column;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-bottom: 2px solid var(--pink-mid);
+  padding: 16px 20px;
+  gap: 12px;
+  z-index: 999;
+}
+
+#menu-toggle:checked ~ .nav-menu {
+  display: flex;
+}
+
+.nav-menu a {
+  padding: 10px 12px;
+  color: var(--pink-accent);
+  font-weight: 600;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.nav-menu a:hover {
+  background: var(--pink-light);
+  color: var(--pink-dark);
+}
+
+/* ─── MOBILE VIEW: < 768px ────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* ─ Top Bar - Hide on mobile ─ */
+  .top-bar {
+    display: none;
+  }
+
+  /* ─ Navbar ─ */
+  .navbar {
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .navbar .inner {
+    max-width: 100%;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  /* ─ Logo - Smaller on mobile ─ */
+  .logo {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .logo-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .logo-text {
+    font-size: 16px;
+  }
+
+  /* ─ Search - Hide on mobile ─ */
+  .search-wrap {
+    display: none !important;
+  }
+
+  /* ─ Show Hamburger Menu ─ */
+  .hamburger {
+    display: flex;
+  }
+
+  /* ─ Nav Icons - Hide on mobile ─ */
+  .nav-icons {
+    display: none;
+  }
+
+  /* ─ Categories Grid - 2 columns ─ */
+  .categories-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .cat-card {
+    padding: 12px 10px;
+  }
+
+  .cat-card .cat-img {
+    width: 70px;
+    height: 64px;
+  }
+
+  .cat-card .cat-name {
+    font-size: 12px;
+  }
+
+  /* ─ Section ─ */
+  .section {
+    padding: 24px 12px;
+  }
+
+  .section-title {
+    font-size: 20px;
+    margin-bottom: 20px;
+  }
+
+  /* ─ Products Grid - Single column ─ */
+  .products-grid {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 12px 12px 30px;
+    gap: 12px;
+  }
+
+  .product-card {
+    padding: 12px;
+  }
+
+  .product-card .prod-name {
+    font-size: 13px;
+  }
+
+  .product-card .prod-desc {
+    font-size: 11px;
+    -webkit-line-clamp: 1;
+  }
+
+  .product-card .prod-price {
+    font-size: 14px;
+  }
+
+  .product-card .cart-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+
+  /* ─ Featured Header ─ */
+  .featured-header {
+    padding: 0 12px;
+  }
+
+  .featured-header h2 {
+    font-size: 18px;
+  }
+
+  /* ─ Divider ─ */
+  .divider {
+    padding: 0 12px;
+  }
+
+  /* ─ Footer ─ */
+  footer .inner {
+    padding: 0 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  footer .copy {
+    font-size: 12px;
+  }
+
+  footer .socials {
+    gap: 8px;
+  }
+
+  footer .socials a {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  /* ─ Hero Strip ─ */
+  .hero-strip {
+    padding: 24px 12px 18px;
+  }
+
+  .hero-strip h1 {
+    font-size: 24px;
+  }
+
+  .hero-strip p {
+    font-size: 13px;
+  }
+}
+
+/* ─── TABLET VIEW: 768px - 1024px ────────────────────────────────────────── */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* ─ Top Bar - Smaller on tablet ─ */
+  .top-bar .inner {
+    font-size: 12px;
+    gap: 10px;
+  }
+
+  .top-bar .left-links {
+    gap: 12px;
+  }
+
+  .top-bar .right-links {
+    gap: 12px;
+  }
+
+  /* ─ Navbar ─ */
+  .navbar .inner {
+    gap: 16px;
+  }
+
+  /* ─ Logo - Optimized for tablet ─ */
+  .logo {
+    gap: 6px;
+  }
+
+  .logo-icon {
+    width: 45px;
+    height: 45px;
+  }
+
+  .logo-text {
+    font-size: 17px;
+  }
+
+  /* ─ Search - Smaller on tablet ─ */
+  .search-wrap input {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 14px;
+  }
+
+  .search-wrap button {
+    height: 38px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+
+  /* ─ Hide Hamburger Menu ─ */
+  .hamburger {
+    display: none;
+  }
+
+  /* ─ Nav Icons - Smaller ─ */
+  .nav-icons {
+    gap: 12px;
+  }
+
+  .nav-icons a {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  /* ─ Categories Grid - 4 columns ─ */
+  .categories-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .cat-card {
+    padding: 14px 10px;
+  }
+
+  .cat-card .cat-img {
+    width: 75px;
+    height: 68px;
+  }
+
+  .cat-card .cat-name {
+    font-size: 12px;
+  }
+
+  /* ─ Section ─ */
+  .section {
+    padding: 30px 20px;
+  }
+
+  .section-title {
+    font-size: 23px;
+    margin-bottom: 24px;
+  }
+
+  /* ─ Products Grid - 3 columns ─ */
+  .products-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 16px 20px 40px;
+  }
+
+  .product-card {
+    padding: 14px;
+  }
+
+  .product-card .prod-name {
+    font-size: 13px;
+  }
+
+  .product-card .prod-desc {
+    font-size: 12px;
+  }
+
+  .product-card .prod-price {
+    font-size: 15px;
+  }
+
+  .product-card .cart-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  /* ─ Featured Header ─ */
+  .featured-header {
+    padding: 0 20px;
+  }
+
+  .featured-header h2 {
+    font-size: 20px;
+  }
+
+  /* ─ Divider ─ */
+  .divider {
+    padding: 0 20px;
+  }
+
+  /* ─ Footer ─ */
+  footer .inner {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  footer .copy {
+    font-size: 12px;
+  }
+
+  footer .socials {
+    gap: 8px;
+  }
+
+  footer .socials a {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* ─ Hero Strip ─ */
+  .hero-strip {
+    padding: 28px 20px 24px;
+  }
+
+  .hero-strip h1 {
+    font-size: 28px;
+  }
+
+  .hero-strip p {
+    font-size: 14px;
+  }
+}
+
+/* ─── DESKTOP VIEW: > 1024px ─────────────────────────────────────────────── */
+@media (min-width: 1025px) {
+  /* ─ Hide Hamburger Menu ─ */
+  .hamburger {
+    display: none;
+  }
+
+  /* ─ Nav Menu - Show as flex row on desktop ─ */
+  .nav-menu {
+    display: none; /* Keep hidden, hamburger doesn't appear on desktop */
+  }
+
+  /* ─ Navbar ─ */
+  .navbar .inner {
+    gap: 24px;
+  }
+
+  /* ─ Logo ─ */
+  .logo {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .logo-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .logo-text {
+    font-size: 20px;
+  }
+
+  /* ─ Search - Full width ─ */
+  .search-wrap {
+    flex: 1;
+  }
+
+  .search-wrap input {
+    height: 42px;
+    font-size: 14px;
+    padding: 0 18px;
+  }
+
+  .search-wrap button {
+    height: 42px;
+    padding: 0 22px;
+    font-size: 14px;
+  }
+
+  /* ─ Nav Icons ─ */
+  .nav-icons {
+    gap: 16px;
+    flex-shrink: 0;
+  }
+
+  .nav-icons a {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
+  /* ─ Categories Grid - 5 columns ─ */
+  .categories-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+
+  .cat-card {
+    padding: 16px 12px 14px;
+  }
+
+  .cat-card .cat-img {
+    width: 80px;
+    height: 72px;
+  }
+
+  .cat-card .cat-name {
+    font-size: 13px;
+  }
+
+  /* ─ Section ─ */
+  .section {
+    padding: 36px 20px;
+  }
+
+  .section-title {
+    font-size: 26px;
+    margin-bottom: 28px;
+  }
+
+  /* ─ Products Grid - 4 columns ─ */
+  .products-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    padding: 16px 20px 40px;
+  }
+
+  .product-card {
+    padding: 16px;
+  }
+
+  .product-card .prod-name {
+    font-size: 14px;
+  }
+
+  .product-card .prod-desc {
+    font-size: 12px;
+    -webkit-line-clamp: 2;
+  }
+
+  .product-card .prod-price {
+    font-size: 16px;
+  }
+
+  .product-card .cart-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+  }
+
+  /* ─ Featured Header ─ */
+  .featured-header {
+    padding: 0 20px;
+  }
+
+  .featured-header h2 {
+    font-size: 22px;
+  }
+
+  /* ─ Divider ─ */
+  .divider {
+    padding: 0 20px;
+  }
+
+  /* ─ Footer ─ */
+  footer .inner {
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  footer .copy {
+    font-size: 13px;
+  }
+
+  footer .socials {
+    gap: 10px;
+  }
+
+  footer .socials a {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* ─ Hero Strip ─ */
+  .hero-strip {
+    padding: 36px 20px 28px;
+  }
+
+  .hero-strip h1 {
+    font-size: 32px;
+  }
+
+  .hero-strip p {
+    font-size: 15px;
+  }
+}
+
+/* ─── EXTRA SMALL PHONES: < 480px ─────────────────────────────────────────── */
+@media (max-width: 479px) {
+  .navbar .inner {
+    padding: 0 8px;
+  }
+
+  .logo-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .logo-text {
+    font-size: 14px;
+  }
+
+  .hamburger {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hamburger span {
+    width: 20px;
+    height: 2px;
+  }
+
+  .categories-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .cat-card {
+    padding: 10px 8px;
+  }
+
+  .cat-card .cat-img {
+    width: 60px;
+    height: 56px;
+  }
+
+  .products-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px 8px 20px;
+  }
+
+  .section {
+    padding: 16px 8px;
+  }
+
+  .section-title {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .featured-header h2 {
+    font-size: 16px;
+  }
+}
+
+/* ─── LARGE SCREENS: > 1440px ─────────────────────────────────────────────── */
+@media (min-width: 1441px) {
+  .section,
+  .navbar .inner,
+  footer .inner {
+    max-width: 1400px;
+  }
+
+  .categories-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .products-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .section-title {
+    font-size: 28px;
+  }
+
+  .hero-strip h1 {
+    font-size: 36px;
+  }
+}
+
+/* ─── LANDSCAPE MODE ON MOBILE ────────────────────────────────────────────── */
+@media (max-height: 600px) and (max-width: 1024px) {
+  .navbar .inner {
+    padding: 8px 12px;
+  }
+
+  .hero-strip {
+    padding: 16px 20px 12px;
+  }
+
+  .section {
+    padding: 16px 20px;
+  }
+
+  .section-title {
+    margin-bottom: 16px;
+  }
+}

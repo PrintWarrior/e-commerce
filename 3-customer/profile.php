@@ -176,6 +176,7 @@ if (isset($_POST['update_profile'])) {
         href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="../css/customer_profile.css">
+    <link rel="stylesheet" href="../css/responsive.css">
     <link rel="icon" type="image/png" href="../images/logo.png">
 </head>
 
@@ -215,9 +216,29 @@ if (isset($_POST['update_profile'])) {
                 <div class="logo-text"><span>Beauty</span><span>Mart</span></div>
             </a>
 
-            <div class="search-wrap"></div>
+             <div class="search-wrap"></div>
+             
+             <!-- Hamburger Menu Toggle (hidden checkbox) -->
+             <input type="checkbox" id="menu-toggle">
+             
+             <!-- Hamburger Button -->
+             <label for="menu-toggle" class="hamburger">
+                 <span></span>
+                 <span></span>
+                 <span></span>
+             </label>
+             
+             <!-- Mobile Navigation Menu -->
+             <div class="nav-menu">
+                 <a href="products.php">Products</a>
+                 <a href="orders.php">Orders</a>
+                 <a href="wishlist.php">Wishlist</a>
+                 <a href="cart.php">Cart</a>
+                 <a href="profile.php">Profile</a>
+                 <a href="../logout.php">Logout</a>
+             </div>
 
-            <div class="nav-icons">
+             <div class="nav-icons">
                 <a href="dashboard.php" title="Home">
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">

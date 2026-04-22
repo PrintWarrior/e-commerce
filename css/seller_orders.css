@@ -108,7 +108,42 @@
             cursor: pointer;
             transition: background .2s;
         }
-        .search-form button:hover { background: var(--pink-dark); }
+         .search-form button:hover { background: var(--pink-dark); }
+
+         /* Generate Report button */
+         .btn-generate-report {
+             height: 38px;
+             padding: 0 18px;
+             background: var(--white);
+             color: var(--pink-accent);
+             border: 1.5px solid var(--pink-mid);
+             border-radius: 20px;
+             font-size: 13.5px;
+             font-weight: 800;
+             font-family: 'Nunito', sans-serif;
+             cursor: pointer;
+             transition: background .2s, color .2s, border-color .2s;
+             white-space: nowrap;
+         }
+         .btn-generate-report:hover {
+             background: var(--pink-pale);
+             border-color: var(--pink-accent);
+             color: var(--pink-dark);
+         }
+
+         /* Filters actions wrapper (search + button) */
+         .filters-actions {
+             display: flex;
+             align-items: center;
+             gap: 10px;
+         }
+         @media (max-width: 680px) {
+             .filters-bar { flex-direction: column; align-items: stretch; }
+             .filters-actions { flex-direction: column; }
+             .search-form { width: 100%; }
+             .search-form input { width: 100%; }
+             .btn-generate-report { width: 100%; }
+         }
 
         /* ── Orders list ──────────────────────────────────── */
         .orders-list {

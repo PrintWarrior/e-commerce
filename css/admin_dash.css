@@ -275,4 +275,85 @@
             font-size: 13px; font-weight: 800; color: var(--text-dark);
             transition: background .2s, color .2s;
         }
-        .footer-socials a:hover { background: var(--pink-accent); color: #fff; }
+         .footer-socials a:hover { background: var(--pink-accent); color: #fff; }
+
+ /* ═══════════════════════════════════════════════════════════════
+    MOBILE HAMBURGER MENU — CSS-only toggle for sidebar
+    ═══════════════════════════════════════════════════════════════ */
+
+ /* Hidden checkbox */
+ .admin-menu-toggle {
+   display: none;
+ }
+
+ /* Hamburger button — hidden on desktop, fixed on mobile */
+ .admin-hamburger {
+   display: none;
+   position: fixed;
+   top: 14px;
+   left: 14px;
+   z-index: 400;
+   width: 36px;
+   height: 36px;
+   background: var(--white);
+   border: 1.5px solid var(--pink-mid);
+   border-radius: 8px;
+   cursor: pointer;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
+   gap: 5px;
+   padding: 0;
+   box-shadow: 0 2px 8px rgba(200, 80, 110, .12);
+   transition: border-color .2s;
+ }
+ .admin-hamburger:hover { border-color: var(--pink-accent); }
+
+ .admin-hamburger span {
+   width: 20px;
+   height: 2.5px;
+   background: var(--pink-accent);
+   border-radius: 2px;
+   transition: all .3s ease;
+   display: block;
+ }
+
+ .admin-menu-toggle:checked ~ .admin-hamburger span:nth-child(1) {
+   transform: rotate(45deg) translate(5px, 5px);
+ }
+ .admin-menu-toggle:checked ~ .admin-hamburger span:nth-child(2) { opacity: 0; }
+ .admin-menu-toggle:checked ~ .admin-hamburger span:nth-child(3) {
+   transform: rotate(-45deg) translate(5px, -5px);
+ }
+
+ /* Backdrop overlay when menu open */
+ .admin-menu-toggle:checked ~ .sidebar::before {
+   content: '';
+   position: fixed;
+   inset: 0;
+   background: rgba(0,0,0,.25);
+   z-index: -1;
+ }
+
+ /* ═══════════════════════════════════════════════════════════════
+    RESPONSIVE — collapse sidebar on mobile
+    ═══════════════════════════════════════════════════════════════ */
+ @media (max-width: 768px) {
+   .sidebar {
+     position: fixed;
+     left: -var(--sidebar-w);
+     transform: translateX(-100%);
+     transition: transform .3s ease;
+     z-index: 300;
+     box-shadow: var(--shadow-md);
+   }
+   .sidebar.open { transform: translateX(0); }
+
+   .admin-hamburger { display: flex; }
+
+   .admin-menu-toggle:checked ~ .sidebar {
+     transform: translateX(0);
+   }
+
+   .main { width: 100%; }
+ }

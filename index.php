@@ -65,6 +65,7 @@ if (!empty($db_categories)) {
     <title>Beauty Mart</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/index.css">
+    <link rel="stylesheet" href="css/responsive.css">
     <link rel="icon" type="image/png" href="images/logo.png">
 </head>
 <body>
@@ -106,6 +107,25 @@ if (!empty($db_categories)) {
             <div class="search-wrap">
                 <input type="text" placeholder="Search...">
                 <button type="button">Search</button>
+            </div>
+
+            <!-- Hamburger Menu Toggle (hidden checkbox) -->
+            <input type="checkbox" id="menu-toggle">
+
+            <!-- Hamburger Button -->
+            <label for="menu-toggle" class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </label>
+
+            <!-- Mobile Navigation Menu -->
+            <div class="nav-menu">
+                <a href="includes/about.php">About Us</a>
+                <a href="includes/contact.php">Contact Us</a>
+                <a href="includes/sell.php">Start Selling</a>
+                <a href="includes/register.php">Sign Up</a>
+                <a href="includes/login.php">Login</a>
             </div>
 
             <!-- Icons -->

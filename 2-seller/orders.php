@@ -71,7 +71,17 @@ if (isset($_POST['update_status'])) {
 $status_filter = $_GET['status'] ?? 'all';
 $search        = $_GET['search'] ?? '';
 
-$query  = "SELECT DISTINCT o.*, u.firstname, u.lastname, u.email FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id JOIN customers c ON o.customer_id = c.id JOIN users u ON c.user_id = u.id WHERE p.seller_id = ?";
+ $query  = "SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
+                   a.barangay, a.municipality, a.province, a.zip_code, a.address_details,
+                   pm.name AS payment_method_name
+            FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN products p ON oi.product_id = p.id
+            JOIN customers c ON o.customer_id = c.id
+            JOIN users u ON c.user_id = u.id
+            LEFT JOIN addresses a ON o.shipping_address_id = a.id
+            LEFT JOIN payment_methods pm ON o.payment_method_id = pm.id
+            WHERE p.seller_id = ?";
 $params = [$seller_id];
 
 if ($status_filter !== 'all') { $query .= " AND o.status = ?"; $params[] = $status_filter; }
@@ -109,6 +119,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/seller_header.css">
     <link rel="stylesheet" href="../css/seller_orders.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 <body>
 
@@ -164,15 +175,20 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                     <?php endforeach; ?>
                 </div>
 
-                <form method="get" class="search-form">
-                    <?php if ($status_filter !== 'all'): ?>
-                        <input type="hidden" name="status" value="<?= htmlspecialchars($status_filter) ?>">
-                    <?php endif; ?>
-                    <input type="text" name="search"
-                           placeholder="Search by order # or customer"
-                           value="<?= htmlspecialchars($search) ?>">
-                    <button type="submit">Search</button>
-                </form>
+                <div class="filters-actions">
+                    <form method="get" class="search-form">
+                        <?php if ($status_filter !== 'all'): ?>
+                            <input type="hidden" name="status" value="<?= htmlspecialchars($status_filter) ?>">
+                        <?php endif; ?>
+                        <input type="text" name="search"
+                               placeholder="Search by order # or customer"
+                               value="<?= htmlspecialchars($search) ?>">
+                        <button type="submit">Search</button>
+                    </form>
+                    <button type="button" id="generate-report-btn" class="btn-generate-report">
+                        📄 Generate Report
+                    </button>
+                </div>
             </div>
 
             <!-- Orders list -->
@@ -283,8 +299,255 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
             </div>
         </footer>
 
-    </div><!-- /main-content -->
-</div><!-- /seller-wrapper -->
+     </div><!-- /main-content -->
+ </div><!-- /seller-wrapper -->
 
-</body>
-</html>
+ <!-- Report Modal -->
+ <div id="report-modal" class="report-modal-overlay" style="display:none;">
+     <div class="report-modal">
+         <div class="report-modal-header">
+             <div>
+                 <h2>Order Report</h2>
+                 <p class="report-subtitle">
+                     Filter: <?= ucfirst($status_filter) ?> orders
+                     <?php if ($search): ?>
+                         | Search: "<?= htmlspecialchars($search) ?>"
+                     <?php endif; ?>
+                     | (<?= count($orders) ?> order<?= count($orders) === 1 ? '' : 's' ?>)
+                 </p>
+             </div>
+             <button type="button" class="report-close" id="report-close">&times;</button>
+         </div>
+         <div class="report-modal-body">
+             <!-- Report Table -->
+             <table class="report-table">
+                 <thead>
+                     <tr>
+                         <th>Order #</th>
+                         <th>Date</th>
+                         <th>Customer</th>
+                         <th>Shipping</th>
+                         <th>Payment</th>
+                         <th>Products</th>
+                         <th>Total</th>
+                         <th>Status</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     <?php foreach ($orders as $order): ?>
+                     <tr>
+                         <td class="report-order-id">#<?= $order['id'] ?></td>
+                         <td class="report-date"><?= date('M j, Y', strtotime($order['created_at'])) ?></td>
+                         <td class="report-customer">
+                             <?= htmlspecialchars($order['firstname'] . ' ' . $order['lastname']) ?>
+                             <br><small><?= htmlspecialchars($order['email']) ?></small>
+                         </td>
+                         <td class="report-shipping">
+                             <?php
+                             $addr = trim(($order['barangay'] ?? '') . ' ' . ($order['municipality'] ?? '') . ' ' . ($order['province'] ?? ''));
+                             echo $addr ? htmlspecialchars($addr) : '—';
+                             ?>
+                         </td>
+                         <td class="report-payment">
+                             <?= htmlspecialchars($order['payment_method_name'] ?? 'COD') ?>
+                         </td>
+                         <td class="report-items">
+                             <?php foreach ($order['items'] as $item): ?>
+                                 <div>• <?= htmlspecialchars($item['name']) ?> × <?= $item['quantity'] ?></div>
+                             <?php endforeach; ?>
+                         </td>
+                         <td class="report-total">₱<?= number_format($order['total_amount'], 2) ?></td>
+                         <td>
+                             <span class="status-badge status-<?= $order['status'] ?>">
+                                 <?= ucfirst($order['status']) ?>
+                             </span>
+                         </td>
+                     </tr>
+                     <?php endforeach; ?>
+                 </tbody>
+             </table>
+
+             <?php if (empty($orders)): ?>
+                 <p class="report-empty">No orders match this filter.</p>
+             <?php endif; ?>
+         </div>
+         <div class="report-modal-footer">
+             <button type="button" class="btn-print-report" id="btn-print-report">Print Report</button>
+             <button type="button" class="btn-close-modal" id="btn-close-report">Close</button>
+         </div>
+     </div>
+ </div>
+
+ <!-- Report Modal Styles -->
+ <style>
+ .report-modal-overlay {
+     position: fixed; inset: 0;
+     background: rgba(0,0,0,.6);
+     z-index: 10000;
+     display: flex; align-items: flex-start; justify-content: center;
+     overflow-y: auto;
+     padding: 40px 20px;
+ }
+ .report-modal {
+     background: #fff;
+     width: 100%; max-width: 900px;
+     border-radius: 14px;
+     box-shadow: 0 12px 60px rgba(0,0,0,.35);
+     overflow: hidden;
+     margin: 40px 0;
+ }
+ .report-modal-header {
+     background: linear-gradient(135deg, #fce8ee, #f5c6d4);
+     padding: 18px 24px;
+     display: flex; justify-content: space-between; align-items: flex-start;
+     border-bottom: 2px solid var(--pink-mid);
+ }
+ .report-modal-header h2 {
+     margin: 0;
+     font-family: 'Playfair Display', serif;
+     font-size: 24px; font-weight: 700;
+     color: var(--pink-accent);
+ }
+ .report-subtitle {
+     margin: 4px 0 0;
+     font-size: 13px;
+     color: var(--text-muted);
+ }
+ .report-close {
+     background: none; border: none;
+     font-size: 32px; line-height: 1;
+     color: var(--pink-dark);
+     cursor: pointer; width: 36px; height: 36px;
+     display: flex; align-items: center; justify-content: center;
+     border-radius: 50%; transition: background .15s;
+ }
+ .report-close:hover { background: rgba(200,80,110,.1); }
+
+ .report-modal-body {
+     padding: 20px 24px 0;
+     max-height: 70vh;
+     overflow-y: auto;
+ }
+ .report-table {
+     width: 100%;
+     border-collapse: collapse;
+     font-size: 14px;
+ }
+ .report-table th {
+     text-align: left;
+     font-size: 11px;
+     font-weight: 800;
+     color: var(--text-muted);
+     text-transform: uppercase;
+     letter-spacing: .5px;
+     padding: 10px 12px;
+     background: var(--pink-pale);
+     border-bottom: 2px solid var(--pink-mid);
+     white-space: nowrap;
+ }
+ .report-table td {
+     padding: 14px 12px;
+     border-bottom: 1px solid #f5eef0;
+     vertical-align: top;
+     font-size: 13.5px;
+ }
+ .report-table tbody tr:hover { background: #fdf5f7; }
+ .report-order-id { font-weight: 800; color: var(--pink-accent); }
+ .report-date { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+ .report-customer { font-weight: 700; color: var(--text-dark); }
+ .report-customer small { font-weight: 400; color: var(--text-muted); font-size: 12px; }
+ .report-shipping { font-size: 13px; color: var(--text-mid); white-space: nowrap; }
+ .report-payment { font-size: 13px; color: var(--text-mid); }
+ .report-items { font-size: 13px; color: var(--text-mid); }
+ .report-items div { line-height: 1.5; }
+ .report-total { font-weight: 800; color: var(--text-dark); }
+
+ .report-empty {
+     text-align: center; padding: 40px 20px;
+     color: var(--text-muted); font-style: italic;
+ }
+
+ .report-modal-footer {
+     padding: 16px 24px;
+     background: var(--pink-soft);
+     border-top: 1.5px solid var(--pink-mid);
+     display: flex; justify-content: flex-end; gap: 12px;
+ }
+ .btn-print-report {
+     height: 40px; padding: 0 22px;
+     background: var(--pink-accent); color: #fff;
+     border: none; border-radius: 20px;
+     font-size: 14px; font-weight: 800;
+     font-family: 'Nunito', sans-serif;
+     cursor: pointer;
+     transition: background .2s;
+ }
+ .btn-print-report:hover { background: var(--pink-dark); }
+ .btn-close-modal {
+     height: 40px; padding: 0 22px;
+     background: #fff; color: var(--text-mid);
+     border: 1.5px solid var(--pink-mid);
+     border-radius: 20px;
+     font-size: 14px; font-weight: 800;
+     font-family: 'Nunito', sans-serif;
+     cursor: pointer;
+     transition: background .2s, color .2s;
+ }
+ .btn-close-modal:hover { background: var(--pink-pale); color: var(--pink-dark); }
+
+ @media print {
+     body * { visibility: hidden; }
+     #report-modal, #report-modal * { visibility: visible; }
+     #report-modal {
+         position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+         background: #fff; z-index: 999999;
+         display: block !important;
+         padding: 0;
+         margin: 0;
+         overflow: visible;
+     }
+     .report-modal { margin: 0; box-shadow: none; border-radius: 0; max-width: 100%; }
+     .report-modal-header, .report-modal-footer, .report-close { display: none !important; }
+     .report-modal-body { max-height: none; overflow: visible; padding: 0; }
+     .report-table { font-size: 11px; }
+     .report-table th { background: #fce8ee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 6px 8px; }
+     .report-table td { padding: 6px 8px; }
+     .report-shipping, .report-payment { white-space: nowrap; }
+     .report-items div { line-height: 1.4; }
+     @page { margin: 10mm; size: landscape; }
+ }
+ </style>
+
+ <script>
+ (function() {
+     const modal = document.getElementById('report-modal');
+     const openBtn = document.getElementById('generate-report-btn');
+     const closeBtn = document.getElementById('report-close');
+     const closeBtn2 = document.getElementById('btn-close-report');
+     const printBtn = document.getElementById('btn-print-report');
+
+     openBtn?.addEventListener('click', () => {
+         modal.style.display = 'flex';
+         document.body.style.overflow = 'hidden';
+     });
+
+     const closeModal = () => {
+         modal.style.display = 'none';
+         document.body.style.overflow = '';
+     };
+
+     closeBtn?.addEventListener('click', closeModal);
+     closeBtn2?.addEventListener('click', closeModal);
+     modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+     printBtn?.addEventListener('click', () => {
+         modal.style.display = 'block';
+         document.body.style.overflow = 'hidden';
+         window.print();
+         setTimeout(() => { modal.style.display = 'none'; document.body.style.overflow = ''; }, 100);
+     });
+ })();
+ </script>
+
+ </body>
+ </html>

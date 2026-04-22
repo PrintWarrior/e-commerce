@@ -98,6 +98,7 @@ $low_stock = (int)$stmt->fetchColumn();
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/seller_header.css">
     <link rel="stylesheet" href="../css/seller_products.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 <body>
 

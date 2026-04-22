@@ -755,23 +755,90 @@ ul, ol { list-style: none; }
 }
 .seller-footer .socials a:hover { background: var(--pink-accent); color: #fff; }
 
-/* ═══════════════════════════════════════════════════════════════
-   RESPONSIVE — collapse sidebar on small screens
-   ═══════════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: -var(--sidebar-w);
-        transform: translateX(-100%);
-        transition: transform .3s ease;
-        z-index: 300;
-        box-shadow: var(--shadow-md);
-    }
-    .sidebar.open { transform: translateX(0); }
+ /* ═══════════════════════════════════════════════════════════════
+    MOBILE HAMBURGER MENU — CSS-only toggle for sidebar
+    ═══════════════════════════════════════════════════════════════ */
 
-    .main-content { width: 100%; }
+ /* Hidden checkbox */
+ .seller-menu-toggle {
+   display: none;
+ }
 
-    .topbar { padding: 0 16px; }
-    .page-content { padding: 18px 16px; }
-    .seller-footer { padding: 14px 16px; }
-}
+ /* Hamburger button — desktop: hidden; mobile: fixed top-left */
+ .seller-hamburger {
+   display: none;
+   position: fixed;
+   top: 14px;
+   left: 14px;
+   z-index: 400;
+   width: 36px;
+   height: 36px;
+   background: var(--white);
+   border: 1.5px solid var(--pink-mid);
+   border-radius: 8px;
+   cursor: pointer;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
+   gap: 5px;
+   padding: 0;
+   box-shadow: 0 2px 8px rgba(200, 80, 110, .12);
+   transition: border-color .2s;
+ }
+ .seller-hamburger:hover { border-color: var(--pink-accent); }
+
+ .seller-hamburger span {
+   width: 20px;
+   height: 2.5px;
+   background: var(--pink-accent);
+   border-radius: 2px;
+   transition: all .3s ease;
+   display: block;
+ }
+
+ /* Hamburger → X animation when checked */
+ .seller-menu-toggle:checked ~ .seller-hamburger span:nth-child(1) {
+   transform: rotate(45deg) translate(5px, 5px);
+ }
+ .seller-menu-toggle:checked ~ .seller-hamburger span:nth-child(2) { opacity: 0; }
+ .seller-menu-toggle:checked ~ .seller-hamburger span:nth-child(3) {
+   transform: rotate(-45deg) translate(5px, -5px);
+ }
+
+ /* Backdrop overlay (optional, visible only when menu open) */
+ .seller-menu-toggle:checked ~ .sidebar::before {
+   content: '';
+   position: fixed;
+   inset: 0;
+   background: rgba(0,0,0,.25);
+   z-index: -1;
+ }
+
+ /* ═══════════════════════════════════════════════════════════════
+    RESPONSIVE — collapse sidebar on small screens
+    ═══════════════════════════════════════════════════════════════ */
+ @media (max-width: 768px) {
+   .sidebar {
+     position: fixed;
+     left: -var(--sidebar-w);
+     transform: translateX(-100%);
+     transition: transform .3s ease;
+     z-index: 300;
+     box-shadow: var(--shadow-md);
+   }
+   .sidebar.open { transform: translateX(0); }
+
+   /* Show hamburger on mobile, wire it to open sidebar */
+   .seller-hamburger { display: flex; }
+
+   /* When hamburger checked → force sidebar open */
+   .seller-menu-toggle:checked ~ .sidebar {
+     transform: translateX(0);
+   }
+
+   .main-content { width: 100%; }
+
+   .topbar { padding: 0 16px; }
+   .page-content { padding: 18px 16px; }
+   .seller-footer { padding: 14px 16px; }
+ }

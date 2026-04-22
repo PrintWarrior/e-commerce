@@ -37,6 +37,7 @@ $categories = [
         rel="stylesheet">
     <link rel="icon" type="image/png" href="../images/logo.png">
     <link rel="stylesheet" href="../css/customer_dash.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 
 <body>
@@ -71,6 +72,26 @@ $categories = [
             <div class="search-wrap">
                 <input type="text" placeholder="Search...">
                 <button type="button">Search</button>
+            </div>
+
+            <!-- Hamburger Menu Toggle (hidden checkbox) -->
+            <input type="checkbox" id="menu-toggle">
+
+            <!-- Hamburger Button -->
+            <label for="menu-toggle" class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </label>
+
+            <!-- Mobile Navigation Menu -->
+            <div class="nav-menu">
+                <a href="products.php">Products</a>
+                <a href="orders.php">Orders</a>
+                <a href="wishlist.php">Wishlist</a>
+                <a href="cart.php">Cart</a>
+                <a href="profile.php">Profile</a>
+                <a href="../logout.php">Logout</a>
             </div>
 
             <div class="nav-icons">

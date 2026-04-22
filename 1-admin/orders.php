@@ -82,11 +82,19 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orders | Beauty Mart Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../css/admin_orders.css">
+     <link rel="stylesheet" href="../css/admin_orders.css">
+     <link rel="stylesheet" href="../css/admin_dash.css">
+     <link rel="stylesheet" href="../css/responsive.css">
 </head>
-<body>
-<div class="shell">
-    <aside class="sidebar">
+ <body>
+ <div class="shell">
+     <!-- Mobile Hamburger Toggle -->
+     <input type="checkbox" id="admin-menu-toggle" class="admin-menu-toggle">
+     <label for="admin-menu-toggle" class="admin-hamburger">
+         <span></span><span></span><span></span>
+     </label>
+ 
+     <aside class="sidebar">
         <div class="sidebar-brand">
             <div class="brand-icon">
                 <img src="../images/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.textContent='*'">

@@ -106,6 +106,7 @@ if (isset($_POST['cancel_deletion'])) {
     <title>Account Settings | Beauty Mart</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../css/customer_account.css">
+    <link rel="stylesheet" href="../css/responsive.css">
     <link rel="icon" href="../images/logo.png" type="image/png">
 </head>
 <body>

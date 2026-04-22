@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/functions.php';
 
 if (!isLoggedIn())
@@ -212,15 +212,22 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <link
         href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap"
         rel="stylesheet">
-        <link rel="stylesheet" href="../css/admin_sellers.css">
+         <link rel="stylesheet" href="../css/admin_sellers.css">
+         <link rel="stylesheet" href="../css/admin_dash.css">
+         <link rel="stylesheet" href="../css/responsive.css">
 </head>
 
 <body>
 
-    <div class="shell">
-
-        <!--Sidebar -->
-        <aside class="sidebar">
+     <div class="shell">
+         <!-- Mobile Hamburger Toggle -->
+         <input type="checkbox" id="admin-menu-toggle" class="admin-menu-toggle">
+         <label for="admin-menu-toggle" class="admin-hamburger">
+             <span></span><span></span><span></span>
+         </label>
+ 
+         <!--Sidebar -->
+         <aside class="sidebar">
             <div class="sidebar-brand">
                 <div class="brand-icon">
                     <img src="../images/logo.png" alt="Logo"

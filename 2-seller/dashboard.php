@@ -59,7 +59,7 @@ $recent_reviews = [];
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="../css/seller_dash.css">
-
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 <body>
 

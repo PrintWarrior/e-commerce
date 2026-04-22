@@ -83,6 +83,7 @@ $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
     <link rel="icon" type="image/png" href="../images/logo.png">
     <link rel="stylesheet" href="../css/customer_products.css">
     <link rel="stylesheet" href="../css/customer_dash.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 <body>
     <div class="top-bar">
@@ -111,6 +112,27 @@ $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
                 <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search products...">
                 <button type="submit">Search</button>
             </form>
+            
+            <!-- Hamburger Menu Toggle (hidden checkbox) -->
+            <input type="checkbox" id="menu-toggle">
+            
+            <!-- Hamburger Button -->
+            <label for="menu-toggle" class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </label>
+            
+            <!-- Mobile Navigation Menu -->
+            <div class="nav-menu">
+                <a href="products.php">Products</a>
+                <a href="orders.php">Orders</a>
+                <a href="wishlist.php">Wishlist</a>
+                <a href="cart.php">Cart</a>
+                <a href="profile.php">Profile</a>
+                <a href="../logout.php">Logout</a>
+            </div>
+
             <div class="nav-icons">
                 <a href="dashboard.php" title="Home"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/><polyline points="9 21 9 12 15 12 15 21"/></svg></a>
                 <a href="orders.php" title="Orders"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></a>

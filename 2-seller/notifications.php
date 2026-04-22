@@ -85,6 +85,7 @@ function notif_meta(string $type): array {
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/seller_header.css">
     <link rel="stylesheet" href="../css/seller_notifications.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
 <body>
 
