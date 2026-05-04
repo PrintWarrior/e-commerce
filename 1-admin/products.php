@@ -184,6 +184,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <a href="dashboard.php" class="<?= $current_page==='dashboard.php' ? 'active':'' ?>">
                 <span class="ni">📊</span> Dashboard
             </a>
+            <a href="create_users.php" class="<?= $current_page==='create_users.php' ? 'active':'' ?>">
+                <span class="ni">➕</span> Create User
+            </a>
             <a href="manage_users.php" class="<?= $current_page==='manage_users.php' ? 'active':'' ?>">
                 <span class="ni">👥</span> Manage Users
             </a>

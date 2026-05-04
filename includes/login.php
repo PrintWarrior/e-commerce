@@ -4,7 +4,7 @@ require_once 'functions.php';
 if (isLoggedIn()) {
     // Redirect based on user type - go up one level to root, then to respective folders
     if ($_SESSION['user_type'] == 'superadmin') {
-        redirect('../0-superadmin/dashboard.php');
+        redirect('../1-admin/dashboard.php');
     } elseif ($_SESSION['user_type'] == 'admin') {
         redirect('../1-admin/dashboard.php');
     } elseif ($_SESSION['user_type'] == 'seller') {
@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['profile_image'] = $user['profile_pic'] ?? null;
                 
                 if ($user_type == 'superadmin') {
-                    redirect('../0-superadmin/dashboard.php');
+                    redirect('../1-admin/dashboard.php');
                 } elseif ($user_type == 'admin') {
                     redirect('../1-admin/dashboard.php');
                 } else {

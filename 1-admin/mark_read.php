@@ -6,11 +6,7 @@ if (!isLoggedIn()) {
     redirect('../login.php');
 }
 
-// Check if user is admin (exists in admins table)
-$stmt = $pdo->prepare("SELECT id FROM admins WHERE user_id = ?");
-$stmt->execute([$_SESSION['user_id']]);
-$admin_record = $stmt->fetch();
-if (!$admin_record) {
+if (!isAdminOrSuperadmin()) {
     redirect('../login.php');
 }
 

@@ -5,6 +5,7 @@ require_once 'functions.php';
 
 $error = '';
 $success = '';
+$genericSuccessMessage = "If an account exists with this email, a password reset link has been sent.";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $email = trim($_POST['email']);
@@ -15,36 +16,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Please enter a valid email address.";
     } else {
-        // Check if user exists with this email
-        $stmt = $pdo->prepare("SELECT id, firstname, username FROM users WHERE email = ?");
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
-        
-        if ($user) {
-            // Generate unique token
-            $token = bin2hex(random_bytes(32));
-            $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
-            
-            // Delete any existing reset tokens for this user
-            $stmt = $pdo->prepare("DELETE FROM password_resets WHERE user_id = ?");
-            $stmt->execute([$user['id']]);
-            
-            // Insert new reset token
-            $stmt = $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)");
-            if ($stmt->execute([$user['id'], $token, $expires])) {
-                // Send password reset email
-                if (sendPasswordResetEmail($email, $token)) {
-                    $success = "A password reset link has been sent to your email. Please check your inbox.";
+        try {
+            // Check if user exists with this email
+            $stmt = $pdo->prepare("SELECT id, firstname, username FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            $user = $stmt->fetch();
+
+            if ($user) {
+                // Generate unique token
+                $token = bin2hex(random_bytes(32));
+                $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+
+                // Delete any existing reset tokens for this user
+                $stmt = $pdo->prepare("DELETE FROM password_resets WHERE user_id = ?");
+                $stmt->execute([$user['id']]);
+
+                // Insert new reset token
+                $stmt = $pdo->prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)");
+                if ($stmt->execute([$user['id'], $token, $expires])) {
+                    if (!sendPasswordResetEmail($email, $token)) {
+                        error_log('Password reset email failed to send for user ID ' . (int) $user['id']);
+                    }
                 } else {
-                    $error = "Failed to send reset email. Please try again later.";
+                    error_log('Password reset token insert failed for user ID ' . (int) $user['id']);
                 }
-            } else {
-                $error = "Failed to generate reset token. Please try again.";
             }
-        } else {
-            // Don't reveal if email exists or not for security reasons
-            // Show same message as success to prevent email enumeration
-            $success = "If an account exists with this email, a password reset link has been sent.";
+
+            $success = $genericSuccessMessage;
+        } catch (Throwable $e) {
+            error_log('Forgot password request failed: ' . $e->getMessage());
+            $success = $genericSuccessMessage;
         }
     }
 }

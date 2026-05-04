@@ -14,68 +14,163 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([$_SESSION['user_id']]);
 $admin = $stmt->fetch();
-$is_superadmin_viewer = !empty($admin['superadmin_id']);
+$viewer_label = !empty($admin['superadmin_id']) ? 'Superadmin' : 'Administrator';
 
 $flash = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['toggle_verify'])) {
-        $userId = (int)($_POST['user_id'] ?? 0);
-        $verify = (int)($_POST['verify'] ?? 0);
+    if (isset($_POST['save_user'])) {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $firstname = trim((string) ($_POST['firstname'] ?? ''));
+        $lastname = trim((string) ($_POST['lastname'] ?? ''));
+        $username = trim((string) ($_POST['username'] ?? ''));
+        $email = trim((string) ($_POST['email'] ?? ''));
+        $emailVerified = (int) ($_POST['email_verified'] ?? 0);
+        $businessName = trim((string) ($_POST['business_name'] ?? ''));
+        $businessAddress = trim((string) ($_POST['business_address'] ?? ''));
+        $businessPhone = trim((string) ($_POST['business_phone'] ?? ''));
+        $businessTaxId = trim((string) ($_POST['business_tax_id'] ?? ''));
+
+        $errors = [];
+        if ($userId <= 0) $errors[] = 'Invalid user selected.';
+        if ($firstname === '') $errors[] = 'First name is required.';
+        if ($lastname === '') $errors[] = 'Last name is required.';
+        if ($username === '') $errors[] = 'Username is required.';
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required.';
+        if (!in_array($emailVerified, [0, 1], true)) $errors[] = 'Invalid email verification value.';
+
         $stmt = $pdo->prepare("
-            SELECT a.id AS admin_id, sa.id AS superadmin_id
+            SELECT s.id AS seller_id
             FROM users u
-            LEFT JOIN admins a ON a.user_id = u.id
+            LEFT JOIN sellers s ON s.user_id = u.id
+            WHERE u.id = ?
+        ");
+        $stmt->execute([$userId]);
+        $targetRoleData = $stmt->fetch();
+        $isSellerTarget = !empty($targetRoleData['seller_id']);
+
+        if ($isSellerTarget) {
+            if ($businessName === '') $errors[] = 'Business name is required for seller accounts.';
+            if ($businessAddress === '') $errors[] = 'Business address is required for seller accounts.';
+            if ($businessPhone === '') $errors[] = 'Business phone is required for seller accounts.';
+        }
+
+        if (empty($errors)) {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE (username = ? OR email = ?) AND id <> ?");
+            $stmt->execute([$username, $email, $userId]);
+            if ($stmt->fetch()) {
+                $errors[] = 'Username or email already exists on another account.';
+            }
+        }
+
+        if (empty($errors)) {
+            $pdo->beginTransaction();
+
+            try {
+                $verificationToken = $emailVerified === 1 ? null : bin2hex(random_bytes(32));
+                $stmt = $pdo->prepare("
+                    UPDATE users
+                    SET firstname = ?, lastname = ?, username = ?, email = ?, email_verified = ?, verification_token = ?
+                    WHERE id = ?
+                ");
+                $stmt->execute([$firstname, $lastname, $username, $email, $emailVerified, $verificationToken, $userId]);
+
+                if ($isSellerTarget) {
+                    $pdo->prepare("
+                        UPDATE sellers
+                        SET business_name = ?, business_address = ?, phone = ?, tax_id = ?
+                        WHERE user_id = ?
+                    ")->execute([
+                        $businessName,
+                        $businessAddress,
+                        $businessPhone,
+                        $businessTaxId !== '' ? $businessTaxId : null,
+                        $userId
+                    ]);
+                }
+
+                logSystemEvent(
+                    'admin_user_updated',
+                    'users',
+                    $userId,
+                    "{$viewer_label} updated account #{$userId} ({$username}).",
+                    (int) $_SESSION['user_id']
+                );
+
+                $pdo->commit();
+                $flash = ['type' => 'success', 'text' => 'User details updated successfully.'];
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                $flash = ['type' => 'error', 'text' => 'Failed to update user: ' . $e->getMessage()];
+            }
+        } else {
+            $flash = ['type' => 'error', 'text' => implode(' ', $errors)];
+        }
+    }
+
+    if (isset($_POST['toggle_verify'])) {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $verify = (int) ($_POST['verify'] ?? 0);
+
+        if ($userId > 0 && in_array($verify, [0, 1], true)) {
+            $verificationToken = $verify === 1 ? null : bin2hex(random_bytes(32));
+            $pdo->prepare("UPDATE users SET email_verified = ?, verification_token = ? WHERE id = ?")
+                ->execute([$verify, $verificationToken, $userId]);
+            $flash = ['type' => 'success', 'text' => 'User verification updated.'];
+        } else {
+            $flash = ['type' => 'error', 'text' => 'Invalid verification update.'];
+        }
+    }
+
+    if (isset($_POST['delete_user'])) {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $stmt = $pdo->prepare("
+            SELECT u.username, sa.id AS superadmin_id
+            FROM users u
             LEFT JOIN superadmins sa ON sa.user_id = u.id
             WHERE u.id = ?
         ");
         $stmt->execute([$userId]);
         $target = $stmt->fetch();
 
-        if ($userId > 0 && ($is_superadmin_viewer || empty($target['superadmin_id']))) {
-            $pdo->prepare("UPDATE users SET email_verified = ? WHERE id = ?")->execute([$verify, $userId]);
-            $flash = ['type' => 'success', 'text' => 'User verification updated.'];
+        if (!$target) {
+            $flash = ['type' => 'error', 'text' => 'User not found.'];
+        } elseif ($userId === (int) $_SESSION['user_id']) {
+            $flash = ['type' => 'error', 'text' => 'You cannot delete your own account here.'];
+        } elseif (!empty($target['superadmin_id'])) {
+            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be deleted.'];
         } else {
-            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be modified here.'];
-        }
-    }
-
-    if (isset($_POST['delete_user'])) {
-        $userId = (int)($_POST['user_id'] ?? 0);
-        $stmt = $pdo->prepare("
-            SELECT
-                (SELECT COUNT(*) FROM admins WHERE user_id = ?) AS admin_count,
-                (SELECT COUNT(*) FROM superadmins WHERE user_id = ?) AS superadmin_count
-        ");
-        $stmt->execute([$userId, $userId]);
-        $targetFlags = $stmt->fetch();
-
-        $isTargetAdmin = (int)$targetFlags['admin_count'] > 0;
-        $isTargetSuperadmin = (int)$targetFlags['superadmin_count'] > 0;
-
-        if (
-            $userId > 0 &&
-            !$isTargetAdmin &&
-            !$isTargetSuperadmin &&
-            $userId !== (int)$_SESSION['user_id']
-        ) {
             $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$userId]);
+
+            logSystemEvent(
+                'admin_user_deleted',
+                'users',
+                $userId,
+                "{$viewer_label} deleted account {$target['username']}.",
+                (int) $_SESSION['user_id']
+            );
+
             $flash = ['type' => 'success', 'text' => 'User deleted successfully.'];
-        } elseif ($isTargetSuperadmin) {
-            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be viewed or modified here.'];
-        } else {
-            $flash = ['type' => 'error', 'text' => 'Admin accounts cannot be deleted here.'];
         }
     }
 }
 
-$search = trim((string)($_GET['search'] ?? ''));
-$role = trim((string)($_GET['role'] ?? ''));
-$status = trim((string)($_GET['status'] ?? ''));
+$search = trim((string) ($_GET['search'] ?? ''));
+$role = trim((string) ($_GET['role'] ?? ''));
+$status = trim((string) ($_GET['status'] ?? ''));
+$selectedViewId = (int) ($_GET['view'] ?? 0);
+$selectedEditId = (int) ($_GET['edit'] ?? 0);
 
 $sql = "
     SELECT u.*,
+           a.id AS admin_id,
            sa.id AS superadmin_id,
+           c.id AS customer_id,
+           s.id AS seller_id,
+           s.business_name,
+           s.business_address,
+           s.phone AS seller_phone,
+           s.tax_id,
            CASE
                WHEN sa.id IS NOT NULL THEN 'Superadmin'
                WHEN a.id IS NOT NULL THEN 'Admin'
@@ -92,10 +187,6 @@ $sql = "
 ";
 $params = [];
 
-if (!$is_superadmin_viewer) {
-    $sql .= " AND sa.id IS NULL ";
-}
-
 if ($search !== '') {
     $sql .= " AND (u.firstname LIKE ? OR u.lastname LIKE ? OR u.username LIKE ? OR u.email LIKE ?) ";
     $like = '%' . $search . '%';
@@ -103,14 +194,16 @@ if ($search !== '') {
 }
 
 if ($role !== '') {
-    if ($role === 'Admin') {
+    if ($role === 'Superadmin') {
+        $sql .= " AND sa.id IS NOT NULL ";
+    } elseif ($role === 'Admin') {
         $sql .= " AND a.id IS NOT NULL ";
     } elseif ($role === 'Seller') {
         $sql .= " AND s.id IS NOT NULL ";
     } elseif ($role === 'Customer') {
         $sql .= " AND c.id IS NOT NULL ";
     } elseif ($role === 'User') {
-        $sql .= " AND a.id IS NULL AND s.id IS NULL AND c.id IS NULL ";
+        $sql .= " AND sa.id IS NULL AND a.id IS NULL AND s.id IS NULL AND c.id IS NULL ";
     }
 }
 
@@ -125,17 +218,27 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $users = $stmt->fetchAll();
 
+$viewUser = null;
+$editUser = null;
+foreach ($users as $user) {
+    if ($selectedViewId > 0 && (int) $user['id'] === $selectedViewId) $viewUser = $user;
+    if ($selectedEditId > 0 && (int) $user['id'] === $selectedEditId) $editUser = $user;
+}
+if (!$viewUser && !empty($users)) $viewUser = $users[0];
+
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_applications WHERE status='pending'");
 $stmt->execute();
-$pending_apps = (int)$stmt->fetchColumn();
+$pending_apps = (int) $stmt->fetchColumn();
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
 $stmt->execute([$_SESSION['user_id']]);
-$unread_count = (int)$stmt->fetchColumn();
+$unread_count = (int) $stmt->fetchColumn();
 
 $verified_count = 0;
+$superadmin_count = 0;
 foreach ($users as $user) {
-    if ((int)$user['email_verified'] === 1) $verified_count++;
+    if ((int) $user['email_verified'] === 1) $verified_count++;
+    if ($user['user_role'] === 'Superadmin') $superadmin_count++;
 }
 
 $current_page = basename($_SERVER['PHP_SELF']);
@@ -147,20 +250,18 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Users | Beauty Mart</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-     <link rel="stylesheet" href="../css/admin_users.css">
-     <link rel="stylesheet" href="../css/admin_dash.css">
-     <link rel="stylesheet" href="../css/responsive.css">
+    <link rel="stylesheet" href="../css/admin_users.css">
+    <link rel="stylesheet" href="../css/admin_dash.css">
+    <link rel="stylesheet" href="../css/responsive.css">
 </head>
- <body>
- <div class="shell">
-     <!-- Mobile Hamburger Toggle -->
-     <input type="checkbox" id="admin-menu-toggle" class="admin-menu-toggle">
-     <label for="admin-menu-toggle" class="admin-hamburger">
-         <span></span><span></span><span></span>
-     </label>
+<body>
+<div class="shell">
+    <input type="checkbox" id="admin-menu-toggle" class="admin-menu-toggle">
+    <label for="admin-menu-toggle" class="admin-hamburger">
+        <span></span><span></span><span></span>
+    </label>
 
-     <!-- ── Sidebar ──────────────────────────────────────────── -->
-     <aside class="sidebar">
+    <aside class="sidebar">
         <div class="sidebar-brand">
             <div class="brand-icon">
                 <img src="../images/logo.png" alt="Logo" onerror="this.style.display='none';this.parentElement.textContent='*'">
@@ -181,52 +282,54 @@ $current_page = basename($_SERVER['PHP_SELF']);
             </div>
             <div>
                 <div class="chip-name"><?= htmlspecialchars($admin['firstname'] . ' ' . $admin['lastname']) ?></div>
-                <span class="chip-role">Administrator</span>
+                <span class="chip-role"><?= htmlspecialchars($viewer_label) ?></span>
             </div>
         </div>
 
         <nav class="sidebar-nav">
             <div class="nav-lbl">Main</div>
-            <a href="dashboard.php" class="<?= $current_page==='dashboard.php' ? 'active':'' ?>">
+            <a href="dashboard.php" class="<?= $current_page === 'dashboard.php' ? 'active' : '' ?>">
                 <span class="ni">📊</span> Dashboard
             </a>
-            <a href="manage_users.php" class="<?= $current_page==='manage_users.php' ? 'active':'' ?>">
+            <a href="create_users.php" class="<?= $current_page==='create_users.php' ? 'active':'' ?>">
+                <span class="ni">➕</span> Create User
+            </a>
+            <a href="manage_users.php" class="<?= $current_page === 'manage_users.php' ? 'active' : '' ?>">
                 <span class="ni">👥</span> Manage Users
             </a>
-            <a href="manage_sellers.php" class="<?= $current_page==='manage_sellers.php' ? 'active':'' ?>">
+            <a href="manage_sellers.php" class="<?= $current_page === 'manage_sellers.php' ? 'active' : '' ?>">
                 <span class="ni">🏪</span> Manage Sellers
                 <?php if ($pending_apps > 0): ?><span class="nbadge"><?= $pending_apps ?></span><?php endif; ?>
             </a>
-            <a href="products.php" class="<?= $current_page==='products.php' ? 'active':'' ?>">
+            <a href="products.php" class="<?= $current_page === 'products.php' ? 'active' : '' ?>">
                 <span class="ni">🛍️</span> Products
             </a>
-            <a href="orders.php" class="<?= $current_page==='orders.php' ? 'active':'' ?>">
+            <a href="orders.php" class="<?= $current_page === 'orders.php' ? 'active' : '' ?>">
                 <span class="ni">📦</span> Orders
             </a>
 
             <div class="nav-lbl">Management</div>
-            <a href="manage_deletions.php" class="<?= $current_page==='manage_deletions.php' ? 'active':'' ?>">
+            <a href="manage_deletions.php" class="<?= $current_page === 'manage_deletions.php' ? 'active' : '' ?>">
                 <span class="ni">🗑️</span> Deletion Requests
             </a>
-            <a href="notifications.php" class="<?= $current_page==='notifications.php' ? 'active':'' ?>">
+            <a href="notifications.php" class="<?= $current_page === 'notifications.php' ? 'active' : '' ?>">
                 <span class="ni">🔔</span> Notifications
                 <?php if ($unread_count > 0): ?><span class="nbadge"><?= $unread_count ?></span><?php endif; ?>
             </a>
-            <a href="system_logs.php" class="<?= $current_page==='system_logs.php' ? 'active':'' ?>">
+            <a href="system_logs.php" class="<?= $current_page === 'system_logs.php' ? 'active' : '' ?>">
                 <span class="ni">⚙️</span> System Logs
             </a>
 
             <div class="nav-lbl">Account</div>
-            <a href="profile.php" class="<?= $current_page==='profile.php' ? 'active':'' ?>">
+            <a href="profile.php" class="<?= $current_page === 'profile.php' ? 'active' : '' ?>">
                 <span class="ni">👤</span> My Profile
             </a>
-            
-            <a href="about.php" class="<?= $current_page==='about.php' ? 'active':'' ?>">
+            <a href="about.php" class="<?= $current_page === 'about.php' ? 'active' : '' ?>">
                 <span class="ni">📝</span> About Menu
             </a>
             <a href="../logout.php" class="logout">
                 <span class="ni">🚪</span> Logout
-            </a>    
+            </a>
         </nav>
     </aside>
 
@@ -234,7 +337,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <div class="topbar">
             <div class="topbar-left">
                 <h1>Manage Users</h1>
-                <p>Review roles, verification, and account access.</p>
+                <p>Review users, update account details, and keep the superadmin protected from deletion.</p>
             </div>
             <div class="topbar-right">
                 <span class="topbar-date"><?= date('F j, Y') ?></span>
@@ -249,93 +352,305 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 <div class="alert alert-<?= $flash['type'] === 'success' ? 'success' : 'error' ?>"><?= htmlspecialchars($flash['text']) ?></div>
             <?php endif; ?>
 
+            <section class="workspace-hero">
+                <div class="hero-card">
+                    <div class="hero-kicker">User Workspace</div>
+                    <h2>Manage every account from one admin surface.</h2>
+                    <p class="hero-copy">This page is now focused on discovery, review, and profile maintenance so you can work through accounts cleanly while keeping account creation in a separate dedicated screen.</p>
+                    <div class="hero-pills">
+                        <span class="hero-pill">Live filters for search, role, and verification</span>
+                        <span class="hero-pill">Protected superadmin record</span>
+                        <span class="hero-pill">Seller profile fields in the same editor</span>
+                    </div>
+                    <div class="hero-actions">
+                        <a href="create_users.php" class="btn-primary">Create Account</a>
+                        <?php if ($viewUser): ?>
+                            <a href="#user-detail-panel" class="btn-secondary">Review Selected User</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="hero-sidecard">
+                    <h3>Control Notes</h3>
+                    <p>Use the right-side workspace to create users, inspect protected accounts, and update seller business details without enabling suspend or ban actions.</p>
+                    <div class="mini-stats">
+                        <div class="mini-stat">
+                            <strong><?= number_format(count($users)) ?></strong>
+                            <span>Visible Accounts</span>
+                        </div>
+                        <div class="mini-stat">
+                            <strong><?= number_format($verified_count) ?></strong>
+                            <span>Verified</span>
+                        </div>
+                        <div class="mini-stat">
+                            <strong><?= number_format($superadmin_count) ?></strong>
+                            <span>Protected</span>
+                        </div>
+                        <div class="mini-stat">
+                            <strong><?= number_format($pending_apps) ?></strong>
+                            <span>Seller Requests</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <div class="stats-grid">
                 <div class="stat-card"><div class="stat-icon">🔍</div><div><div class="stat-val"><?= number_format(count($users)) ?></div><div class="stat-lbl">Filtered Users</div></div></div>
-                <div class="stat-card"><div class="stat-icon">✔️</div><div><div class="stat-val"><?= number_format($verified_count) ?></div><div class="stat-lbl">Verified</div></div></div>
+                <div class="stat-card"><div class="stat-icon">✅</div><div><div class="stat-val"><?= number_format($verified_count) ?></div><div class="stat-lbl">Verified</div></div></div>
                 <div class="stat-card warn"><div class="stat-icon">✉️</div><div><div class="stat-val"><?= number_format(count($users) - $verified_count) ?></div><div class="stat-lbl">Unverified</div></div></div>
+                <div class="stat-card"><div class="stat-icon">👑</div><div><div class="stat-val"><?= number_format($superadmin_count) ?></div><div class="stat-lbl">Superadmins</div></div></div>
             </div>
 
-            <div class="dash-card">
-                <div class="card-head"><h2>User Filters</h2></div>
-                <div class="card-body">
-                    <form method="get" class="filters-grid">
-                        <div class="field">
-                            <label for="search">Search</label>
-                            <input id="search" type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Name, username, email">
+            <div class="panel-grid">
+                <div class="stack-grid">
+                    <div class="dash-card">
+                        <div class="card-head"><h2>User Filters</h2></div>
+                        <div class="card-body">
+                            <form method="get" class="filters-grid">
+                                <div class="field">
+                                    <label for="search">Search</label>
+                                    <input id="search" type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Name, username, email">
+                                </div>
+                                <div class="field">
+                                    <label for="role">Role</label>
+                                    <select id="role" name="role">
+                                        <option value="">All roles</option>
+                                        <?php foreach (['Superadmin', 'Admin', 'Seller', 'Customer', 'User'] as $roleOption): ?>
+                                            <option value="<?= $roleOption ?>" <?= $role === $roleOption ? 'selected' : '' ?>><?= $roleOption ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label for="status">Status</label>
+                                    <select id="status" name="status">
+                                        <option value="">All statuses</option>
+                                        <option value="verified" <?= $status === 'verified' ? 'selected' : '' ?>>Verified</option>
+                                        <option value="unverified" <?= $status === 'unverified' ? 'selected' : '' ?>>Unverified</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label>&nbsp;</label>
+                                    <button type="submit" class="btn-primary">Apply Filters</button>
+                                </div>
+                            </form>
+                            <div class="filter-state">
+                                <?php if ($search !== ''): ?><span class="filter-chip">Search: <?= htmlspecialchars($search) ?></span><?php endif; ?>
+                                <?php if ($role !== ''): ?><span class="filter-chip">Role: <?= htmlspecialchars($role) ?></span><?php endif; ?>
+                                <?php if ($status !== ''): ?><span class="filter-chip">Status: <?= htmlspecialchars(ucfirst($status)) ?></span><?php endif; ?>
+                                <?php if ($search === '' && $role === '' && $status === ''): ?><span class="filter-chip">Showing all accounts</span><?php endif; ?>
+                            </div>
                         </div>
-                        <div class="field">
-                            <label for="role">Role</label>
-                            <select id="role" name="role">
-                                <option value="">All roles</option>
-                                <?php foreach (['Admin', 'Seller', 'Customer', 'User'] as $roleOption): ?>
-                                    <option value="<?= $roleOption ?>" <?= $role === $roleOption ? 'selected' : '' ?>><?= $roleOption ?></option>
-                                <?php endforeach; ?>
-                            </select>
+                    </div>
+
+                    <div class="dash-card">
+                        <div class="card-head">
+                            <div>
+                                <div class="section-label">Directory</div>
+                                <h2>User Directory</h2>
+                                <div class="section-copy">Select a row to inspect or edit the account.</div>
+                            </div>
                         </div>
-                        <div class="field">
-                            <label for="status">Status</label>
-                            <select id="status" name="status">
-                                <option value="">All statuses</option>
-                                <option value="verified" <?= $status === 'verified' ? 'selected' : '' ?>>Verified</option>
-                                <option value="unverified" <?= $status === 'unverified' ? 'selected' : '' ?>>Unverified</option>
-                            </select>
+                        <div class="card-body" style="padding:0;">
+                            <?php if (empty($users)): ?>
+                                <div class="empty-state">No users matched the current filters.</div>
+                            <?php else: ?>
+                                <div class="directory-wrap">
+                                    <div class="table-toolbar">
+                                        <div class="toolbar-copy">
+                                            <strong><?= number_format(count($users)) ?> accounts available</strong>
+                                            <span>Pick a record to load it into the detail and edit workspace.</span>
+                                        </div>
+                                        <div class="toolbar-metrics">
+                                            <span class="toolbar-pill"><?= number_format($verified_count) ?> verified</span>
+                                            <span class="toolbar-pill"><?= number_format(count($users) - $verified_count) ?> unverified</span>
+                                            <span class="toolbar-pill"><?= number_format($superadmin_count) ?> protected</span>
+                                        </div>
+                                    </div>
+                                    <div class="directory-table-scroll">
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>User</th>
+                                                    <th>Role</th>
+                                                    <th>Verification</th>
+                                                    <th>Status</th>
+                                                    <th>Created</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($users as $user): ?>
+                                                    <?php $isProtectedSuperadmin = $user['user_role'] === 'Superadmin'; ?>
+                                                    <tr class="<?= ($viewUser && (int) $viewUser['id'] === (int) $user['id']) ? 'row-active' : '' ?>">
+                                                        <td>
+                                                            <div class="stack">
+                                                                <div class="user-name"><?= htmlspecialchars($user['firstname'] . ' ' . $user['lastname']) ?></div>
+                                                                <div class="muted">@<?= htmlspecialchars($user['username']) ?></div>
+                                                                <div class="muted"><?= htmlspecialchars($user['email']) ?></div>
+                                                            </div>
+                                                        </td>
+                                                        <td><span class="role-badge role-<?= strtolower($user['user_role']) ?>"><?= htmlspecialchars($user['user_role']) ?></span></td>
+                                                        <td><span class="status-badge <?= (int) $user['email_verified'] === 1 ? 'status-verified' : 'status-unverified' ?>"><?= (int) $user['email_verified'] === 1 ? 'Verified' : 'Unverified' ?></span></td>
+                                                        <td><span class="status-badge <?= ($user['status'] ?? 'active') === 'active' ? 'status-active' : 'status-flagged' ?>"><?= htmlspecialchars(ucfirst($user['status'] ?? 'active')) ?></span></td>
+                                                        <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($user['created_at']))) ?></td>
+                                                        <td>
+                                                            <div class="actions">
+                                                                <?php if (!$isProtectedSuperadmin): ?>
+                                                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $user['id']])) ?>">View</a>
+                                                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $user['id'], 'edit' => (int) $user['id']])) ?>">Edit</a>
+                                                                    <form method="post">
+                                                                        <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
+                                                                        <input type="hidden" name="verify" value="<?= (int) $user['email_verified'] === 1 ? '0' : '1' ?>">
+                                                                        <button type="submit" name="toggle_verify" class="btn-secondary"><?= (int) $user['email_verified'] === 1 ? 'Mark Unverified' : 'Verify User' ?></button>
+                                                                    </form>
+                                                                <?php else: ?>
+                                                                    <span class="muted">Protected account</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
                         </div>
-                        <div class="field">
-                            <label>&nbsp;</label>
-                            <button type="submit" class="btn-primary">Apply Filters</button>
-                        </div>
-                    </form>
+                    </div>
                 </div>
-            </div>
 
-            <div class="dash-card">
-                <div class="card-head"><h2>User Directory</h2></div>
-                <div class="card-body" style="padding:0;">
-                    <?php if (empty($users)): ?>
-                        <div class="empty-state">No users matched the current filters.</div>
-                    <?php else: ?>
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>User</th>
-                                    <th>Role</th>
-                                    <th>Verification</th>
-                                    <th>Created</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($users as $user): ?>
-                                    <tr>
-                                        <td>
-                                            <div class="stack">
-                                                <div class="user-name"><?= htmlspecialchars($user['firstname'] . ' ' . $user['lastname']) ?></div>
-                                                <div class="muted">@<?= htmlspecialchars($user['username']) ?></div>
-                                                <div class="muted"><?= htmlspecialchars($user['email']) ?></div>
-                                            </div>
-                                        </td>
-                                        <td><span class="role-badge role-<?= strtolower($user['user_role']) ?>"><?= htmlspecialchars($user['user_role']) ?></span></td>
-                                        <td><span class="status-badge <?= (int)$user['email_verified'] === 1 ? 'status-verified' : 'status-unverified' ?>"><?= (int)$user['email_verified'] === 1 ? 'Verified' : 'Unverified' ?></span></td>
-                                        <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($user['created_at']))) ?></td>
-                                        <td>
-                                            <div class="actions">
-                                                <form method="post">
-                                                    <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
-                                                    <input type="hidden" name="verify" value="<?= (int)$user['email_verified'] === 1 ? '0' : '1' ?>">
-                                                    <button type="submit" name="toggle_verify" class="btn-secondary"><?= (int)$user['email_verified'] === 1 ? 'Mark Unverified' : 'Verify User' ?></button>
-                                                </form>
-                                                <?php if ($user['user_role'] !== 'Admin' && (int)$user['id'] !== (int)$_SESSION['user_id']): ?>
-                                                    <form method="post" onsubmit="return confirm('Delete this user permanently?');">
-                                                        <input type="hidden" name="user_id" value="<?= (int)$user['id'] ?>">
-                                                        <button type="submit" name="delete_user" class="btn-danger">Delete User</button>
-                                                    </form>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
+                <div class="stack-grid">
+                    <div class="dash-card" id="user-detail-panel">
+                        <div class="card-head">
+                            <div>
+                                <div class="section-label">Inspect</div>
+                                <h2>User Details</h2>
+                                <div class="section-copy">Editable account information without ban or suspend controls.</div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <?php if (!$viewUser): ?>
+                                <div class="empty-state">Select a user from the directory to inspect the account.</div>
+                            <?php else: ?>
+                                <div class="detail-header">
+                                    <div class="detail-persona">
+                                        <div class="detail-avatar"><?= strtoupper(substr($viewUser['firstname'], 0, 1)) ?></div>
+                                        <div>
+                                            <div class="detail-heading"><?= htmlspecialchars($viewUser['firstname'] . ' ' . $viewUser['lastname']) ?></div>
+                                            <div class="detail-subcopy">Currently viewing <?= htmlspecialchars(strtolower($viewUser['user_role'])) ?> account #<?= (int) $viewUser['id'] ?></div>
+                                        </div>
+                                    </div>
+                                    <span class="role-badge role-<?= strtolower($viewUser['user_role']) ?>"><?= htmlspecialchars($viewUser['user_role']) ?></span>
+                                </div>
+                                <div class="detail-grid">
+                                    <div class="detail-item"><span class="detail-label">Full Name</span><div class="detail-value"><?= htmlspecialchars($viewUser['firstname'] . ' ' . $viewUser['lastname']) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Role</span><div class="detail-value"><?= htmlspecialchars($viewUser['user_role']) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Username</span><div class="detail-value">@<?= htmlspecialchars($viewUser['username']) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Email</span><div class="detail-value"><?= htmlspecialchars($viewUser['email']) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Verification</span><div class="detail-value"><?= (int) $viewUser['email_verified'] === 1 ? 'Verified' : 'Unverified' ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Account Status</span><div class="detail-value"><?= htmlspecialchars(ucfirst($viewUser['status'] ?? 'active')) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">Created</span><div class="detail-value"><?= htmlspecialchars(date('M j, Y g:i A', strtotime($viewUser['created_at']))) ?></div></div>
+                                    <div class="detail-item"><span class="detail-label">User ID</span><div class="detail-value">#<?= (int) $viewUser['id'] ?></div></div>
+                                    <?php if ($viewUser['user_role'] === 'Seller'): ?>
+                                        <div class="detail-item"><span class="detail-label">Business Name</span><div class="detail-value"><?= htmlspecialchars($viewUser['business_name'] ?: 'Not set') ?></div></div>
+                                        <div class="detail-item"><span class="detail-label">Business Phone</span><div class="detail-value"><?= htmlspecialchars($viewUser['seller_phone'] ?: 'Not set') ?></div></div>
+                                        <div class="detail-item"><span class="detail-label">Business Address</span><div class="detail-value"><?= nl2br(htmlspecialchars($viewUser['business_address'] ?: 'Not set')) ?></div></div>
+                                        <div class="detail-item"><span class="detail-label">Tax ID</span><div class="detail-value"><?= htmlspecialchars($viewUser['tax_id'] ?: 'Not set') ?></div></div>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div class="detail-actions">
+                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $viewUser['id'], 'edit' => (int) $viewUser['id']])) ?>">Edit User</a>
+                                    <form method="post" class="inline-form">
+                                        <input type="hidden" name="user_id" value="<?= (int) $viewUser['id'] ?>">
+                                        <input type="hidden" name="verify" value="<?= (int) $viewUser['email_verified'] === 1 ? '0' : '1' ?>">
+                                        <button type="submit" name="toggle_verify" class="btn-secondary"><?= (int) $viewUser['email_verified'] === 1 ? 'Mark Unverified' : 'Verify User' ?></button>
+                                    </form>
+                                    <?php if ((int) $viewUser['id'] !== (int) $_SESSION['user_id']): ?>
+                                        <form method="post" class="inline-form" onsubmit="return confirm('Delete this user permanently? This action cannot be undone.');">
+                                            <input type="hidden" name="user_id" value="<?= (int) $viewUser['id'] ?>">
+                                            <button type="submit" name="delete_user" class="btn-danger" <?= $viewUser['user_role'] === 'Superadmin' ? 'disabled' : '' ?>>Delete User</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($viewUser['user_role'] === 'Superadmin'): ?>
+                                    <div class="protected-note">This account is protected and cannot be deleted.</div>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <?php if ($editUser): ?>
+                        <div class="dash-card editor-shell">
+                            <div class="card-head">
+                                <div>
+                                    <div class="section-label">Edit</div>
+                                    <h2>Edit User</h2>
+                                    <div class="section-copy">Update profile fields and seller details when applicable.</div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <form method="post" class="form-grid">
+                                    <input type="hidden" name="user_id" value="<?= (int) $editUser['id'] ?>">
+                                    <div class="field">
+                                        <label for="edit_firstname">First Name</label>
+                                        <input id="edit_firstname" type="text" name="firstname" value="<?= htmlspecialchars($editUser['firstname']) ?>" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="edit_lastname">Last Name</label>
+                                        <input id="edit_lastname" type="text" name="lastname" value="<?= htmlspecialchars($editUser['lastname']) ?>" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="edit_username">Username</label>
+                                        <input id="edit_username" type="text" name="username" value="<?= htmlspecialchars($editUser['username']) ?>" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="edit_email">Email</label>
+                                        <input id="edit_email" type="email" name="email" value="<?= htmlspecialchars($editUser['email']) ?>" required>
+                                    </div>
+                                    <div class="field">
+                                        <label for="edit_email_verified">Verification</label>
+                                        <select id="edit_email_verified" name="email_verified">
+                                            <option value="0" <?= (int) $editUser['email_verified'] === 0 ? 'selected' : '' ?>>Unverified</option>
+                                            <option value="1" <?= (int) $editUser['email_verified'] === 1 ? 'selected' : '' ?>>Verified</option>
+                                        </select>
+                                    </div>
+                                    <div class="field">
+                                        <label>Role</label>
+                                        <input type="text" value="<?= htmlspecialchars($editUser['user_role']) ?>" disabled>
+                                        <div class="field-note">Role changes are not handled here.</div>
+                                    </div>
+                                    <?php if ($editUser['user_role'] === 'Seller'): ?>
+                                        <div class="field full">
+                                            <label for="edit_business_name">Business Name</label>
+                                            <input id="edit_business_name" type="text" name="business_name" value="<?= htmlspecialchars($editUser['business_name'] ?? '') ?>" required>
+                                        </div>
+                                        <div class="field">
+                                            <label for="edit_business_phone">Business Phone</label>
+                                            <input id="edit_business_phone" type="text" name="business_phone" value="<?= htmlspecialchars($editUser['seller_phone'] ?? '') ?>" required>
+                                        </div>
+                                        <div class="field">
+                                            <label for="edit_business_tax_id">Tax ID</label>
+                                            <input id="edit_business_tax_id" type="text" name="business_tax_id" value="<?= htmlspecialchars($editUser['tax_id'] ?? '') ?>">
+                                        </div>
+                                        <div class="field full">
+                                            <label for="edit_business_address">Business Address</label>
+                                            <textarea id="edit_business_address" name="business_address" required><?= htmlspecialchars($editUser['business_address'] ?? '') ?></textarea>
+                                        </div>
+                                    <?php else: ?>
+                                        <input type="hidden" name="business_name" value="">
+                                        <input type="hidden" name="business_phone" value="">
+                                        <input type="hidden" name="business_tax_id" value="">
+                                        <input type="hidden" name="business_address" value="">
+                                    <?php endif; ?>
+                                    <div class="field full">
+                                        <div class="detail-actions">
+                                            <button type="submit" name="save_user" class="btn-primary">Save Changes</button>
+                                            <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $editUser['id']])) ?>">Close Editor</a>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>

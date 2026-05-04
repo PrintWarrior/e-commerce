@@ -1,9 +1,15 @@
 <?php
 require_once '../includes/functions.php';
 
-if (!isLoggedIn() || !isAdmin()) redirect('../login.php');
+if (!isLoggedIn() || !isAdminOrSuperadmin()) redirect('../login.php');
 
-$stmt = $pdo->prepare("SELECT u.*, a.id AS admin_id FROM users u JOIN admins a ON u.id = a.user_id WHERE u.id = ?");
+$stmt = $pdo->prepare("
+    SELECT u.*, a.id AS admin_id, sa.id AS superadmin_id
+    FROM users u
+    LEFT JOIN admins a ON u.id = a.user_id
+    LEFT JOIN superadmins sa ON u.id = sa.user_id
+    WHERE u.id = ?
+");
 $stmt->execute([$_SESSION['user_id']]);
 $admin = $stmt->fetch();
 
@@ -123,6 +129,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="nav-lbl">Main</div>
             <a href="dashboard.php" class="<?= $current_page==='dashboard.php' ? 'active':'' ?>">
                 <span class="ni">📊</span> Dashboard
+            </a>
+            <a href="create_users.php" class="<?= $current_page==='create_users.php' ? 'active':'' ?>">
+                <span class="ni">➕</span> Create User
             </a>
             <a href="manage_users.php" class="<?= $current_page==='manage_users.php' ? 'active':'' ?>">
                 <span class="ni">👥</span> Manage Users

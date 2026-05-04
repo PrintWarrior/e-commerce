@@ -198,6 +198,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <nav class="sidebar-nav">
             <div class="nav-lbl">Main</div>
             <a href="dashboard.php">📊 Dashboard</a>
+            <a href="create_users.php">➕ Create User</a>
             <a href="manage_users.php">👥 Manage Users</a>
             <a href="manage_sellers.php">🏪 Manage Sellers</a>
             <a href="products.php">🛍️ Products</a>
