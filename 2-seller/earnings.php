@@ -63,7 +63,11 @@ if (isset($_POST['request_payout'])) {
                 }
 
                 $_SESSION['flash_success'] = "Payout request of ₱" . number_format($amount, 2) . " submitted successfully!";
-                header('Location: earnings.php');
+                $qs = http_build_query(array_filter([
+                    'tx_page' => $_GET['tx_page'] ?? '',
+                    'payout_page' => $_GET['payout_page'] ?? '',
+                ]));
+                header('Location: earnings.php' . ($qs ? "?$qs" : ''));
                 exit;
             } else {
                 $error = "Failed to submit payout request. Please try again.";
@@ -74,6 +78,12 @@ if (isset($_POST['request_payout'])) {
 
 $success = $_SESSION['flash_success'] ?? '';
 unset($_SESSION['flash_success']);
+$transactions_per_page = 10;
+$transactions_page = max(1, (int) ($_GET['tx_page'] ?? 1));
+$transactions_offset = ($transactions_page - 1) * $transactions_per_page;
+$payouts_per_page = 10;
+$payouts_page = max(1, (int) ($_GET['payout_page'] ?? 1));
+$payouts_offset = ($payouts_page - 1) * $payouts_per_page;
 
 // Earnings summary
 $earnings_stmt->execute([$seller_id]);
@@ -99,26 +109,59 @@ $stmt->execute([$seller_id]);
 $monthly_earnings = array_reverse($stmt->fetchAll());
 
 // Recent transactions
+$transactions_count_stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_earnings WHERE seller_id = ?");
+$transactions_count_stmt->execute([$seller_id]);
+$transactions_total = (int) $transactions_count_stmt->fetchColumn();
+$transactions_total_pages = max(1, (int) ceil($transactions_total / $transactions_per_page));
+if ($transactions_page > $transactions_total_pages) {
+    $transactions_page = $transactions_total_pages;
+    $transactions_offset = ($transactions_page - 1) * $transactions_per_page;
+}
+
 $stmt = $pdo->prepare("
     SELECT se.*, o.id AS order_id
     FROM seller_earnings se
     JOIN orders o ON se.order_id = o.id
     WHERE se.seller_id = ?
-    ORDER BY se.created_at DESC LIMIT 20
+    ORDER BY se.created_at DESC
+    LIMIT ? OFFSET ?
 ");
-$stmt->execute([$seller_id]);
+$stmt->bindValue(1, $seller_id, PDO::PARAM_INT);
+$stmt->bindValue(2, $transactions_per_page, PDO::PARAM_INT);
+$stmt->bindValue(3, $transactions_offset, PDO::PARAM_INT);
+$stmt->execute();
 $transactions = $stmt->fetchAll();
 
 // Payout history
+$payouts_count_stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_payouts WHERE seller_id = ?");
+$payouts_count_stmt->execute([$seller_id]);
+$payouts_total = (int) $payouts_count_stmt->fetchColumn();
+$payouts_total_pages = max(1, (int) ceil($payouts_total / $payouts_per_page));
+if ($payouts_page > $payouts_total_pages) {
+    $payouts_page = $payouts_total_pages;
+    $payouts_offset = ($payouts_page - 1) * $payouts_per_page;
+}
+
 $stmt = $pdo->prepare("
     SELECT sp.*, pm.name AS payment_method_name
     FROM seller_payouts sp
     LEFT JOIN payment_methods pm ON sp.payment_method_id = pm.id
     WHERE sp.seller_id = ?
     ORDER BY sp.requested_at DESC
+    LIMIT ? OFFSET ?
 ");
-$stmt->execute([$seller_id]);
+$stmt->bindValue(1, $seller_id, PDO::PARAM_INT);
+$stmt->bindValue(2, $payouts_per_page, PDO::PARAM_INT);
+$stmt->bindValue(3, $payouts_offset, PDO::PARAM_INT);
+$stmt->execute();
 $payouts = $stmt->fetchAll();
+
+$transactions_pagination_params = array_filter([
+    'payout_page' => $payouts_page > 1 ? $payouts_page : '',
+]);
+$payouts_pagination_params = array_filter([
+    'tx_page' => $transactions_page > 1 ? $transactions_page : '',
+]);
 
 // Chart data
 $chart_labels   = array_column($monthly_earnings, 'label');
@@ -314,6 +357,25 @@ $chart_data     = array_map('floatval', array_column($monthly_earnings, 'monthly
                             </tbody>
                         </table>
                     </div>
+                    <?php if ($transactions_total_pages > 1): ?>
+                        <div class="pagination">
+                            <?php if ($transactions_page > 1): ?>
+                                <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$transactions_pagination_params, 'tx_page' => $transactions_page - 1])) ?>">‹</a>
+                            <?php else: ?>
+                                <span class="page-link disabled">‹</span>
+                            <?php endif; ?>
+
+                            <?php for ($page = 1; $page <= $transactions_total_pages; $page++): ?>
+                                <a class="page-link <?= $page === $transactions_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$transactions_pagination_params, 'tx_page' => $page])) ?>"><?= $page ?></a>
+                            <?php endfor; ?>
+
+                            <?php if ($transactions_page < $transactions_total_pages): ?>
+                                <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$transactions_pagination_params, 'tx_page' => $transactions_page + 1])) ?>">›</a>
+                            <?php else: ?>
+                                <span class="page-link disabled">›</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
 
@@ -357,6 +419,25 @@ $chart_data     = array_map('floatval', array_column($monthly_earnings, 'monthly
                             </tbody>
                         </table>
                     </div>
+                    <?php if ($payouts_total_pages > 1): ?>
+                        <div class="pagination">
+                            <?php if ($payouts_page > 1): ?>
+                                <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$payouts_pagination_params, 'payout_page' => $payouts_page - 1])) ?>">‹</a>
+                            <?php else: ?>
+                                <span class="page-link disabled">‹</span>
+                            <?php endif; ?>
+
+                            <?php for ($page = 1; $page <= $payouts_total_pages; $page++): ?>
+                                <a class="page-link <?= $page === $payouts_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$payouts_pagination_params, 'payout_page' => $page])) ?>"><?= $page ?></a>
+                            <?php endfor; ?>
+
+                            <?php if ($payouts_page < $payouts_total_pages): ?>
+                                <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$payouts_pagination_params, 'payout_page' => $payouts_page + 1])) ?>">›</a>
+                            <?php else: ?>
+                                <span class="page-link disabled">›</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
 

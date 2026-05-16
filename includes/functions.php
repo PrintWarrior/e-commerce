@@ -615,4 +615,38 @@ function getCartTotal($customer_id) {
     $result = $stmt->fetch();
     return $result['total'] ?? 0;
 }
+
+function paginateArray(array $items, int $currentPage = 1, int $perPage = 5): array {
+    $perPage = max(1, $perPage);
+    $totalItems = count($items);
+    $totalPages = max(1, (int) ceil($totalItems / $perPage));
+    $currentPage = max(1, min($currentPage, $totalPages));
+    $offset = ($currentPage - 1) * $perPage;
+
+    return [
+        'items' => array_slice($items, $offset, $perPage),
+        'current_page' => $currentPage,
+        'per_page' => $perPage,
+        'total_items' => $totalItems,
+        'total_pages' => $totalPages,
+        'offset' => $offset,
+        'from' => $totalItems > 0 ? $offset + 1 : 0,
+        'to' => min($offset + $perPage, $totalItems),
+        'has_prev' => $currentPage > 1,
+        'has_next' => $currentPage < $totalPages,
+    ];
+}
+
+function buildQueryUrl(string $path, array $params = [], array $overrides = []): string {
+    $merged = array_merge($params, $overrides);
+
+    foreach ($merged as $key => $value) {
+        if ($value === null || $value === '') {
+            unset($merged[$key]);
+        }
+    }
+
+    $query = http_build_query($merged);
+    return $query === '' ? $path : $path . '?' . $query;
+}
 ?>

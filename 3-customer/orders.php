@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$order_id, $customer_id]);
     }
 
-    $qs = http_build_query(array_filter(['status' => $_GET['status'] ?? '', 'search' => $_GET['search'] ?? '']));
+    $qs = http_build_query(array_filter(['status' => $_GET['status'] ?? '', 'search' => $_GET['search'] ?? '', 'page' => $_GET['page'] ?? '']));
     header('Location: orders.php' . ($qs ? "?$qs" : '')); exit;
 }
 
@@ -53,26 +53,47 @@ $flash_success = $_SESSION['flash_success'] ?? ''; unset($_SESSION['flash_succes
 // ── Filters ───────────────────────────────────────────────────
 $status_filter = $_GET['status'] ?? 'all';
 $search        = $_GET['search'] ?? '';
+$orders_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $orders_per_page;
 
 // ── Query ─────────────────────────────────────────────────────
-$query  = "SELECT o.*, pm.name AS payment_method_name, COUNT(oi.id) AS item_count,
-           GROUP_CONCAT(DISTINCT p.name SEPARATOR ', ') AS product_names
-           FROM orders o
+$query_base  = " FROM orders o
            LEFT JOIN payment_methods pm ON o.payment_method_id = pm.id
            JOIN order_items oi ON o.id = oi.order_id
            JOIN products p ON oi.product_id = p.id
            WHERE o.customer_id = ? AND (o.hidden_from_customer IS NULL OR o.hidden_from_customer = 0)";
 $params = [$customer_id];
 
-if ($status_filter !== 'all') { $query .= " AND o.status = ?"; $params[] = $status_filter; }
+if ($status_filter !== 'all') { $query_base .= " AND o.status = ?"; $params[] = $status_filter; }
 if ($search) {
-    $query   .= " AND (o.id LIKE ? OR p.name LIKE ?)";
+    $query_base   .= " AND (o.id LIKE ? OR p.name LIKE ?)";
     $sp       = "%$search%";
     $params   = array_merge($params, [$sp, $sp]);
 }
-$query .= " GROUP BY o.id ORDER BY o.created_at DESC";
+
+$count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id)" . $query_base);
+$count_stmt->execute($params);
+$filtered_total = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($filtered_total / $orders_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $orders_per_page;
+}
+
+$query  = "SELECT o.*, pm.name AS payment_method_name, COUNT(oi.id) AS item_count,
+           GROUP_CONCAT(DISTINCT p.name SEPARATOR ', ') AS product_names
+           " . $query_base . "
+           GROUP BY o.id ORDER BY o.created_at DESC
+           LIMIT ? OFFSET ?";
 $stmt   = $pdo->prepare($query);
-$stmt->execute($params);
+$order_params = [...$params, $orders_per_page, $offset];
+$param_index = 1;
+foreach ($order_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
@@ -93,6 +114,10 @@ foreach (['pending','processing','shipped','delivered','completed','cancelled'] 
     $counts[$st] = (int)$s->fetchColumn();
 }
 $counts['all'] = array_sum($counts);
+$pagination_params = array_filter([
+    'status' => $status_filter !== 'all' ? $status_filter : '',
+    'search' => $search,
+]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -312,6 +337,7 @@ $counts['all'] = array_sum($counts);
                         <?php if ($order['status'] === 'pending'): ?>
                             <form method="post">
                                 <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                <input type="hidden" name="page" value="<?= $current_page ?>">
                                 <button type="submit" name="cancel_order" class="btn-cancel"
                                         onclick="return confirm('Cancel order #<?= $order['id'] ?>?')">
                                     Cancel Order
@@ -322,6 +348,7 @@ $counts['all'] = array_sum($counts);
                         <?php if (in_array($order['status'], ['shipped', 'delivered'])): ?>
                             <form method="post">
                                 <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                <input type="hidden" name="page" value="<?= $current_page ?>">
                                 <button type="submit" name="order_received" class="btn-received">
                                     Order Received
                                 </button>
@@ -330,6 +357,7 @@ $counts['all'] = array_sum($counts);
 
                         <form method="post">
                             <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                            <input type="hidden" name="page" value="<?= $current_page ?>">
                             <button type="submit" name="remove_from_view" class="btn-ghost"
                                     onclick="return confirm('Remove this order from your view?')">
                                 Remove from View
@@ -343,6 +371,25 @@ $counts['all'] = array_sum($counts);
 
                 </div>
                 <?php endforeach; ?>
+                <?php if ($total_pages > 1): ?>
+                    <div class="pagination">
+                        <?php if ($current_page > 1): ?>
+                            <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>">‹</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">‹</span>
+                        <?php endif; ?>
+
+                        <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                            <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $page])) ?>"><?= $page ?></a>
+                        <?php endfor; ?>
+
+                        <?php if ($current_page < $total_pages): ?>
+                            <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>">›</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">›</span>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
         </div>

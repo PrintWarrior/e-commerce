@@ -76,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $editId = (int)($_GET['edit'] ?? 0);
+$page = max(1, (int)($_GET['page'] ?? 1));
 $editProduct = [
     'id' => 0,
     'seller_id' => '',
@@ -116,6 +117,12 @@ $sql .= " ORDER BY p.created_at DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $products = $stmt->fetchAll();
+$pagination = paginateArray($products, $page, 5);
+$pagedProducts = $pagination['items'];
+$baseQuery = [
+    'search' => $search,
+    'page' => $pagination['current_page'],
+];
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_applications WHERE status='pending'");
 $stmt->execute();
@@ -328,6 +335,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <?php if (empty($products)): ?>
                         <div class="empty-state">No products matched the current search.</div>
                     <?php else: ?>
+                        <div class="table-summary">
+                            Showing <?= number_format($pagination['from']) ?>-<?= number_format($pagination['to']) ?> of <?= number_format($pagination['total_items']) ?> products
+                        </div>
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -341,7 +351,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($products as $product): ?>
+                                <?php foreach ($pagedProducts as $product): ?>
                                     <tr>
                                         <td><img class="thumb" src="../product_images/<?= htmlspecialchars($product['image']) ?>" alt="" onerror="this.style.display='none'"></td>
                                         <td>
@@ -354,7 +364,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                         <td><?= (int)$product['stock'] ?></td>
                                         <td>
                                             <div class="actions">
-                                                <a href="products.php?edit=<?= (int)$product['id'] ?>" class="btn-secondary" style="display:inline-flex;align-items:center;">Edit</a>
+                                                <a href="<?= htmlspecialchars(buildQueryUrl('products.php', $baseQuery, ['edit' => (int)$product['id']])) ?>" class="btn-secondary" style="display:inline-flex;align-items:center;">Edit</a>
                                                 <form method="post" onsubmit="return confirm('Delete this product?');">
                                                     <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
                                                     <button type="submit" name="delete_product" class="btn-danger">Delete</button>
@@ -365,6 +375,22 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                        <?php if ($pagination['total_pages'] > 1): ?>
+                            <div class="pagination-bar">
+                                <div class="pagination-summary">Page <?= $pagination['current_page'] ?> of <?= $pagination['total_pages'] ?></div>
+                                <div class="pagination-links">
+                                    <?php if ($pagination['has_prev']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('products.php', $baseQuery, ['page' => $pagination['current_page'] - 1, 'edit' => $editId ?: null])) ?>">Previous</a>
+                                    <?php endif; ?>
+                                    <?php for ($i = 1; $i <= $pagination['total_pages']; $i++): ?>
+                                        <a class="page-link <?= $i === $pagination['current_page'] ? 'is-active' : '' ?>" href="<?= htmlspecialchars(buildQueryUrl('products.php', $baseQuery, ['page' => $i, 'edit' => $editId ?: null])) ?>"><?= $i ?></a>
+                                    <?php endfor; ?>
+                                    <?php if ($pagination['has_next']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('products.php', $baseQuery, ['page' => $pagination['current_page'] + 1, 'edit' => $editId ?: null])) ?>">Next</a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

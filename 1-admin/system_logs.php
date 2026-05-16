@@ -10,6 +10,7 @@ $is_superadmin = !empty($admin['superadmin_id']);
 $search       = trim((string)($_GET['search'] ?? ''));
 $actionFilter = trim((string)($_GET['action'] ?? ''));
 $tableFilter  = trim((string)($_GET['table']  ?? ''));
+$page         = max(1, (int)($_GET['page'] ?? 1));
 
 $logSql    = "SELECT sl.*, u.username, u.firstname, u.lastname FROM system_logs sl LEFT JOIN users u ON u.id=sl.user_id LEFT JOIN superadmins sa ON sa.user_id=u.id WHERE 1=1";
 $logParams = [];
@@ -26,6 +27,14 @@ if ($tableFilter  !== '') { $logSql .= " AND sl.table_name = ?"; $logParams[] = 
 
 $logSql .= " ORDER BY sl.created_at DESC, sl.log_id DESC LIMIT 200";
 $stmt = $pdo->prepare($logSql); $stmt->execute($logParams); $logs = $stmt->fetchAll();
+$pagination = paginateArray($logs, $page, 5);
+$pagedLogs = $pagination['items'];
+$baseQuery = [
+    'search' => $search,
+    'action' => $actionFilter,
+    'table' => $tableFilter,
+    'page' => $pagination['current_page'],
+];
 
 $actSql = "SELECT DISTINCT sl.action FROM system_logs sl LEFT JOIN users u ON u.id=sl.user_id LEFT JOIN superadmins sa ON sa.user_id=u.id WHERE 1=1" . (!$is_superadmin?" AND sa.id IS NULL":"") . " ORDER BY sl.action ASC";
 $actions = $pdo->query($actSql)->fetchAll(PDO::FETCH_COLUMN);
@@ -239,7 +248,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <div class="logs-card">
                 <div class="logs-card-head">
                     <h2>⚙️ Audit Log</h2>
-                    <span class="logs-count"><?= number_format(count($logs)) ?> record<?= count($logs)!==1?'s':'' ?> (max 200)</span>
+                    <span class="logs-count"><?= number_format($pagination['total_items']) ?> record<?= $pagination['total_items'] !== 1 ? 's' : '' ?> (max 200)</span>
                 </div>
                 <div class="table-wrap">
                     <?php if (empty($logs)): ?>
@@ -253,6 +262,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
                             </p>
                         </div>
                     <?php else: ?>
+                        <div class="table-summary">
+                            Showing <?= number_format($pagination['from']) ?>-<?= number_format($pagination['to']) ?> of <?= number_format($pagination['total_items']) ?> logs
+                        </div>
                         <table class="logs-table">
                             <thead>
                                 <tr>
@@ -264,7 +276,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($logs as $log):
+                                <?php foreach ($pagedLogs as $log):
                                     $aStyle   = action_style($log['action'] ?? '');
                                     $fullName = trim(($log['firstname'] ?? '') . ' ' . ($log['lastname'] ?? ''));
                                     $displayName = $fullName !== '' ? $fullName : ($log['username'] ?? 'System');
@@ -315,6 +327,22 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                        <?php if ($pagination['total_pages'] > 1): ?>
+                            <div class="pagination-bar">
+                                <div class="pagination-summary">Page <?= $pagination['current_page'] ?> of <?= $pagination['total_pages'] ?></div>
+                                <div class="pagination-links">
+                                    <?php if ($pagination['has_prev']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('system_logs.php', $baseQuery, ['page' => $pagination['current_page'] - 1])) ?>">Previous</a>
+                                    <?php endif; ?>
+                                    <?php for ($i = 1; $i <= $pagination['total_pages']; $i++): ?>
+                                        <a class="page-link <?= $i === $pagination['current_page'] ? 'is-active' : '' ?>" href="<?= htmlspecialchars(buildQueryUrl('system_logs.php', $baseQuery, ['page' => $i])) ?>"><?= $i ?></a>
+                                    <?php endfor; ?>
+                                    <?php if ($pagination['has_next']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('system_logs.php', $baseQuery, ['page' => $pagination['current_page'] + 1])) ?>">Next</a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

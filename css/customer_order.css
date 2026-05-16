@@ -314,6 +314,10 @@
             transition: background .2s; text-decoration: none;
         }
         .btn-shop:hover { background: var(--pink-dark); }
+        .pagination { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+        .page-link { min-width: 42px; height: 42px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--pink-mid); background: #fff; color: var(--text-mid); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
+        .page-link.active { background: var(--pink-accent); color: #fff; border-color: var(--pink-accent); }
+        .page-link.disabled { opacity: .45; pointer-events: none; }
 
         /* ── Footer ─────────────────────────────────────────── */
         footer { background: var(--white); border-top: 1.5px solid var(--pink-mid); padding: 17px 24px; }

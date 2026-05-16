@@ -49,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_product'])) {
     $qs = http_build_query(array_filter([
         'category' => $_POST['category_filter'] ?? '',
         'search'   => $_POST['search_val']      ?? '',
+        'page'     => $_POST['page']            ?? '',
     ]));
     header('Location: products.php' . ($qs ? "?$qs" : ''));
     exit;
@@ -66,18 +67,41 @@ $categories = $stmt->fetchAll();
 // ── Filters ───────────────────────────────────────────────────
 $category_filter = $_GET['category'] ?? '';
 $search          = $_GET['search']   ?? '';
+$products_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $products_per_page;
 
 // ── Build product query ───────────────────────────────────────
-$query  = "SELECT p.*, c.name AS category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.seller_id = ?";
+$query_base  = " FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.seller_id = ?";
 $params = [$seller_id];
 
-if ($category_filter) { $query .= " AND p.category_id = ?"; $params[] = $category_filter; }
-if ($search)          { $query .= " AND p.name LIKE ?";      $params[] = "%$search%"; }
+if ($category_filter) { $query_base .= " AND p.category_id = ?"; $params[] = $category_filter; }
+if ($search)          { $query_base .= " AND p.name LIKE ?"; $params[] = "%$search%"; }
 
-$query .= " ORDER BY p.created_at DESC";
-$stmt   = $pdo->prepare($query);
-$stmt->execute($params);
+$count_stmt = $pdo->prepare("SELECT COUNT(*)" . $query_base);
+$count_stmt->execute($params);
+$filtered_total = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($filtered_total / $products_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $products_per_page;
+}
+
+$query = "SELECT p.*, c.name AS category_name" . $query_base . " ORDER BY p.created_at DESC LIMIT ? OFFSET ?";
+$stmt = $pdo->prepare($query);
+$product_params = [...$params, $products_per_page, $offset];
+$param_index = 1;
+foreach ($product_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $products = $stmt->fetchAll();
+
+$pagination_params = array_filter([
+    'category' => $category_filter,
+    'search' => $search,
+]);
 
 // Counts for stats
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE seller_id = ?"); $stmt->execute([$seller_id]);
@@ -185,8 +209,8 @@ $low_stock = (int)$stmt->fetchColumn();
             <!-- Result count -->
             <?php if ($search || $category_filter): ?>
             <p class="result-count">
-                Showing <strong><?= count($products) ?></strong>
-                result<?= count($products) !== 1 ? 's' : '' ?>
+                Showing <strong><?= count($products) ?></strong> of <strong><?= $filtered_total ?></strong>
+                result<?= $filtered_total !== 1 ? 's' : '' ?>
                 <?= $search ? ' for "' . htmlspecialchars($search) . '"' : '' ?>
                 <?php if ($category_filter):
                     $cat_name = '';
@@ -248,6 +272,7 @@ $low_stock = (int)$stmt->fetchColumn();
                                 <input type="hidden" name="product_id"      value="<?= $p['id'] ?>">
                                 <input type="hidden" name="category_filter" value="<?= htmlspecialchars($category_filter) ?>">
                                 <input type="hidden" name="search_val"      value="<?= htmlspecialchars($search) ?>">
+                                <input type="hidden" name="page"            value="<?= $current_page ?>">
                                 <button type="submit" name="delete_product" class="btn-delete">🗑 Delete</button>
                             </form>
                         </div>
@@ -256,6 +281,26 @@ $low_stock = (int)$stmt->fetchColumn();
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
+
+            <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>">‹</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">‹</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                        <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $page])) ?>"><?= $page ?></a>
+                    <?php endfor; ?>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>">›</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">›</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
 
         </div><!-- /page-content -->
 

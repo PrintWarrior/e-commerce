@@ -158,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $search = trim((string) ($_GET['search'] ?? ''));
 $role = trim((string) ($_GET['role'] ?? ''));
 $status = trim((string) ($_GET['status'] ?? ''));
+$page = max(1, (int) ($_GET['page'] ?? 1));
 $selectedViewId = (int) ($_GET['view'] ?? 0);
 $selectedEditId = (int) ($_GET['edit'] ?? 0);
 
@@ -217,6 +218,14 @@ $sql .= " ORDER BY u.created_at DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $users = $stmt->fetchAll();
+$pagination = paginateArray($users, $page, 5);
+$pagedUsers = $pagination['items'];
+$baseQuery = [
+    'search' => $search,
+    'role' => $role,
+    'status' => $status,
+    'page' => $pagination['current_page'],
+];
 
 $viewUser = null;
 $editUser = null;
@@ -224,7 +233,7 @@ foreach ($users as $user) {
     if ($selectedViewId > 0 && (int) $user['id'] === $selectedViewId) $viewUser = $user;
     if ($selectedEditId > 0 && (int) $user['id'] === $selectedEditId) $editUser = $user;
 }
-if (!$viewUser && !empty($users)) $viewUser = $users[0];
+if (!$viewUser && !empty($pagedUsers)) $viewUser = $pagedUsers[0];
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_applications WHERE status='pending'");
 $stmt->execute();
@@ -456,7 +465,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <div class="directory-wrap">
                                     <div class="table-toolbar">
                                         <div class="toolbar-copy">
-                                            <strong><?= number_format(count($users)) ?> accounts available</strong>
+                                            <strong>Showing <?= number_format($pagination['from']) ?>-<?= number_format($pagination['to']) ?> of <?= number_format($pagination['total_items']) ?> accounts</strong>
                                             <span>Pick a record to load it into the detail and edit workspace.</span>
                                         </div>
                                         <div class="toolbar-metrics">
@@ -478,7 +487,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <?php foreach ($users as $user): ?>
+                                                <?php foreach ($pagedUsers as $user): ?>
                                                     <?php $isProtectedSuperadmin = $user['user_role'] === 'Superadmin'; ?>
                                                     <tr class="<?= ($viewUser && (int) $viewUser['id'] === (int) $user['id']) ? 'row-active' : '' ?>">
                                                         <td>
@@ -495,8 +504,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                                         <td>
                                                             <div class="actions">
                                                                 <?php if (!$isProtectedSuperadmin): ?>
-                                                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $user['id']])) ?>">View</a>
-                                                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $user['id'], 'edit' => (int) $user['id']])) ?>">Edit</a>
+                                                                    <a class="btn-secondary" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['view' => (int) $user['id'], 'edit' => null])) ?>">View</a>
+                                                                    <a class="btn-secondary" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['view' => (int) $user['id'], 'edit' => (int) $user['id']])) ?>">Edit</a>
                                                                     <form method="post">
                                                                         <input type="hidden" name="user_id" value="<?= (int) $user['id'] ?>">
                                                                         <input type="hidden" name="verify" value="<?= (int) $user['email_verified'] === 1 ? '0' : '1' ?>">
@@ -512,6 +521,22 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                             </tbody>
                                         </table>
                                     </div>
+                                    <?php if ($pagination['total_pages'] > 1): ?>
+                                        <div class="pagination-bar">
+                                            <div class="pagination-summary">Page <?= $pagination['current_page'] ?> of <?= $pagination['total_pages'] ?></div>
+                                            <div class="pagination-links">
+                                                <?php if ($pagination['has_prev']): ?>
+                                                    <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['page' => $pagination['current_page'] - 1, 'view' => $selectedViewId ?: null, 'edit' => $selectedEditId ?: null])) ?>">Previous</a>
+                                                <?php endif; ?>
+                                                <?php for ($i = 1; $i <= $pagination['total_pages']; $i++): ?>
+                                                    <a class="page-link <?= $i === $pagination['current_page'] ? 'is-active' : '' ?>" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['page' => $i, 'view' => $selectedViewId ?: null, 'edit' => $selectedEditId ?: null])) ?>"><?= $i ?></a>
+                                                <?php endfor; ?>
+                                                <?php if ($pagination['has_next']): ?>
+                                                    <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['page' => $pagination['current_page'] + 1, 'view' => $selectedViewId ?: null, 'edit' => $selectedEditId ?: null])) ?>">Next</a>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -559,7 +584,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 </div>
 
                                 <div class="detail-actions">
-                                    <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $viewUser['id'], 'edit' => (int) $viewUser['id']])) ?>">Edit User</a>
+                                    <a class="btn-secondary" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['view' => (int) $viewUser['id'], 'edit' => (int) $viewUser['id']])) ?>">Edit User</a>
                                     <form method="post" class="inline-form">
                                         <input type="hidden" name="user_id" value="<?= (int) $viewUser['id'] ?>">
                                         <input type="hidden" name="verify" value="<?= (int) $viewUser['email_verified'] === 1 ? '0' : '1' ?>">
@@ -645,7 +670,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                     <div class="field full">
                                         <div class="detail-actions">
                                             <button type="submit" name="save_user" class="btn-primary">Save Changes</button>
-                                            <a class="btn-secondary" href="manage_users.php?<?= http_build_query(array_filter(['search' => $search, 'role' => $role, 'status' => $status, 'view' => (int) $editUser['id']])) ?>">Close Editor</a>
+                                            <a class="btn-secondary" href="<?= htmlspecialchars(buildQueryUrl('manage_users.php', $baseQuery, ['view' => (int) $editUser['id'], 'edit' => null])) ?>">Close Editor</a>
                                         </div>
                                     </div>
                                 </form>

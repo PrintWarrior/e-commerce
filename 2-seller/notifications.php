@@ -8,14 +8,24 @@ $user_id = $_SESSION['user_id'];
 if (isset($_GET['mark_read']) && is_numeric($_GET['mark_read'])) {
     $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")
         ->execute([$_GET['mark_read'], $user_id]);
-    header('Location: notifications.php?filter=' . ($_GET['filter'] ?? 'all')); exit;
+    $redirect_params = array_filter([
+        'filter' => $_GET['filter'] ?? 'all',
+        'search' => $_GET['search'] ?? '',
+        'page' => $_GET['page'] ?? '',
+    ]);
+    header('Location: notifications.php' . ($redirect_params ? '?' . http_build_query($redirect_params) : '')); exit;
 }
 
 // Delete single
 if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?")
         ->execute([$_GET['delete'], $user_id]);
-    header('Location: notifications.php?filter=' . ($_GET['filter'] ?? 'all')); exit;
+    $redirect_params = array_filter([
+        'filter' => $_GET['filter'] ?? 'all',
+        'search' => $_GET['search'] ?? '',
+        'page' => $_GET['page'] ?? '',
+    ]);
+    header('Location: notifications.php' . ($redirect_params ? '?' . http_build_query($redirect_params) : '')); exit;
 }
 
 // Mark all read (PRG)
@@ -23,7 +33,12 @@ if (isset($_POST['mark_all_read'])) {
     $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?")
         ->execute([$user_id]);
     $_SESSION['flash_success'] = "All notifications marked as read.";
-    header('Location: notifications.php'); exit;
+    $redirect_params = array_filter([
+        'filter' => $_GET['filter'] ?? '',
+        'search' => $_GET['search'] ?? '',
+        'page' => $_GET['page'] ?? '',
+    ]);
+    header('Location: notifications.php' . ($redirect_params ? '?' . http_build_query($redirect_params) : '')); exit;
 }
 
 // Delete all read (PRG)
@@ -31,7 +46,12 @@ if (isset($_POST['delete_read'])) {
     $pdo->prepare("DELETE FROM notifications WHERE user_id = ? AND is_read = 1")
         ->execute([$user_id]);
     $_SESSION['flash_success'] = "Read notifications cleared.";
-    header('Location: notifications.php'); exit;
+    $redirect_params = array_filter([
+        'filter' => $_GET['filter'] ?? '',
+        'search' => $_GET['search'] ?? '',
+        'page' => $_GET['page'] ?? '',
+    ]);
+    header('Location: notifications.php' . ($redirect_params ? '?' . http_build_query($redirect_params) : '')); exit;
 }
 
 $success = $_SESSION['flash_success'] ?? ''; unset($_SESSION['flash_success']);
@@ -39,19 +59,38 @@ $success = $_SESSION['flash_success'] ?? ''; unset($_SESSION['flash_success']);
 // Filters
 $filter = $_GET['filter'] ?? 'all';
 $search = $_GET['search'] ?? '';
+$notifications_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $notifications_per_page;
 
-$query  = "SELECT n.*, nt.code AS type_code, nt.label AS type_label FROM notifications n LEFT JOIN notification_types nt ON n.notification_type_id = nt.id WHERE n.user_id = ?";
+$query_base  = " FROM notifications n LEFT JOIN notification_types nt ON n.notification_type_id = nt.id WHERE n.user_id = ?";
 $params = [$user_id];
-if ($filter === 'unread') { $query .= " AND n.is_read = 0"; }
-elseif ($filter === 'read') { $query .= " AND n.is_read = 1"; }
+if ($filter === 'unread') { $query_base .= " AND n.is_read = 0"; }
+elseif ($filter === 'read') { $query_base .= " AND n.is_read = 1"; }
 if ($search) {
-    $query  .= " AND (n.message LIKE ? OR nt.code LIKE ? OR nt.label LIKE ?)";
+    $query_base  .= " AND (n.message LIKE ? OR nt.code LIKE ? OR nt.label LIKE ?)";
     $sp      = "%$search%";
     $params  = array_merge($params, [$sp, $sp, $sp]);
 }
-$query .= " ORDER BY n.created_at DESC";
+
+$count_stmt = $pdo->prepare("SELECT COUNT(*)" . $query_base);
+$count_stmt->execute($params);
+$filtered_total = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($filtered_total / $notifications_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $notifications_per_page;
+}
+
+$query  = "SELECT n.*, nt.code AS type_code, nt.label AS type_label" . $query_base . " ORDER BY n.created_at DESC LIMIT ? OFFSET ?";
 $stmt   = $pdo->prepare($query);
-$stmt->execute($params);
+$notification_params = [...$params, $notifications_per_page, $offset];
+$param_index = 1;
+foreach ($notification_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $notifications = $stmt->fetchAll();
 
 // Counts
@@ -62,6 +101,10 @@ $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ?");
 $stmt->execute([$user_id]); $total_count = (int)$stmt->fetchColumn();
 
 $read_count = $total_count - $unread_count;
+$pagination_params = array_filter([
+    'filter' => $filter !== 'all' ? $filter : '',
+    'search' => $search,
+]);
 
 // Icon + color map per type
 function notif_meta(string $type): array {
@@ -147,15 +190,15 @@ function notif_meta(string $type): array {
             <div class="notif-toolbar">
                 <!-- Filter pills -->
                 <div class="filter-pills">
-                    <a href="?filter=all"
+                    <a href="?filter=all<?= $search ? '&search=' . urlencode($search) : '' ?>"
                        class="filter-pill <?= $filter === 'all' ? 'active' : '' ?>">
                         All <span class="cnt"><?= $total_count ?></span>
                     </a>
-                    <a href="?filter=unread"
+                    <a href="?filter=unread<?= $search ? '&search=' . urlencode($search) : '' ?>"
                        class="filter-pill <?= $filter === 'unread' ? 'active' : '' ?>">
                         Unread <span class="cnt"><?= $unread_count ?></span>
                     </a>
-                    <a href="?filter=read"
+                    <a href="?filter=read<?= $search ? '&search=' . urlencode($search) : '' ?>"
                        class="filter-pill <?= $filter === 'read' ? 'active' : '' ?>">
                         Read <span class="cnt"><?= $read_count ?></span>
                     </a>
@@ -238,11 +281,11 @@ function notif_meta(string $type): array {
                         <!-- Actions -->
                         <div class="notif-actions">
                             <?php if (!$n['is_read']): ?>
-                                <a href="?mark_read=<?= $n['id'] ?>&filter=<?= $filter ?>"
+                                <a href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page, 'mark_read' => $n['id']])) ?>"
                                    class="notif-action-btn mark-read"
                                    title="Mark as read">✓</a>
                             <?php endif; ?>
-                            <a href="?delete=<?= $n['id'] ?>&filter=<?= $filter ?>"
+                            <a href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page, 'delete' => $n['id']])) ?>"
                                class="notif-action-btn delete"
                                title="Delete"
                                onclick="return confirm('Delete this notification?')">🗑</a>
@@ -252,6 +295,26 @@ function notif_meta(string $type): array {
                     <?php endforeach; ?>
                 <?php endif; ?>
             </div>
+
+            <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>">‹</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">‹</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                        <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $page])) ?>"><?= $page ?></a>
+                    <?php endfor; ?>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>">›</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">›</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
 
         </div><!-- /page-content -->
 

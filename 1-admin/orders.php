@@ -33,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
 
 $search = trim((string)($_GET['search'] ?? ''));
 $statusFilter = trim((string)($_GET['status'] ?? ''));
+$page = max(1, (int)($_GET['page'] ?? 1));
 
 $sql = "
     SELECT o.*, u.firstname, u.lastname, u.username, u.email,
@@ -60,6 +61,13 @@ $sql .= " GROUP BY o.id ORDER BY o.created_at DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $orders = $stmt->fetchAll();
+$pagination = paginateArray($orders, $page, 5);
+$pagedOrders = $pagination['items'];
+$baseQuery = [
+    'search' => $search,
+    'status' => $statusFilter,
+    'page' => $pagination['current_page'],
+];
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM seller_applications WHERE status='pending'");
 $stmt->execute();
@@ -230,6 +238,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <?php if (empty($orders)): ?>
                         <div class="empty-state">No orders matched the current filters.</div>
                     <?php else: ?>
+                        <div class="table-summary">
+                            Showing <?= number_format($pagination['from']) ?>-<?= number_format($pagination['to']) ?> of <?= number_format($pagination['total_items']) ?> orders
+                        </div>
                         <table class="data-table">
                             <thead>
                                 <tr>
@@ -242,7 +253,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($orders as $order): ?>
+                                <?php foreach ($pagedOrders as $order): ?>
                                     <tr>
                                         <td>
                                             <div class="order-title">#<?= (int)$order['id'] ?></div>
@@ -280,6 +291,22 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
+                        <?php if ($pagination['total_pages'] > 1): ?>
+                            <div class="pagination-bar">
+                                <div class="pagination-summary">Page <?= $pagination['current_page'] ?> of <?= $pagination['total_pages'] ?></div>
+                                <div class="pagination-links">
+                                    <?php if ($pagination['has_prev']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('orders.php', $baseQuery, ['page' => $pagination['current_page'] - 1])) ?>">Previous</a>
+                                    <?php endif; ?>
+                                    <?php for ($i = 1; $i <= $pagination['total_pages']; $i++): ?>
+                                        <a class="page-link <?= $i === $pagination['current_page'] ? 'is-active' : '' ?>" href="<?= htmlspecialchars(buildQueryUrl('orders.php', $baseQuery, ['page' => $i])) ?>"><?= $i ?></a>
+                                    <?php endfor; ?>
+                                    <?php if ($pagination['has_next']): ?>
+                                        <a class="page-link" href="<?= htmlspecialchars(buildQueryUrl('orders.php', $baseQuery, ['page' => $pagination['current_page'] + 1])) ?>">Next</a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

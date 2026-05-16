@@ -42,7 +42,8 @@ if (isset($_GET['remove'])) {
     $pdo->prepare("DELETE FROM wishlists WHERE customer_id = ? AND product_id = ?")
         ->execute([$customer_id, (int)$_GET['remove']]);
     $_SESSION['wishlist_msg'] = ['type' => 'success', 'text' => "Item removed from wishlist."];
-    header('Location: wishlist.php'); exit;
+    $qs = http_build_query(array_filter(['page' => $_GET['page'] ?? '']));
+    header('Location: wishlist.php' . ($qs ? "?$qs" : '')); exit;
 }
 
 // Clear wishlist (POST)
@@ -50,7 +51,8 @@ if (isset($_POST['clear_wishlist'])) {
     $pdo->prepare("DELETE FROM wishlists WHERE customer_id = ?")
         ->execute([$customer_id]);
     $_SESSION['wishlist_msg'] = ['type' => 'success', 'text' => "Wishlist cleared."];
-    header('Location: wishlist.php'); exit;
+    $qs = http_build_query(array_filter(['page' => $_POST['page'] ?? '']));
+    header('Location: wishlist.php' . ($qs ? "?$qs" : '')); exit;
 }
 
 // Move to cart (POST)
@@ -71,13 +73,26 @@ if (isset($_POST['move_to_cart'])) {
     $pdo->prepare("DELETE FROM wishlists WHERE customer_id = ? AND product_id = ?")
         ->execute([$customer_id, $pid]);
     $_SESSION['wishlist_msg'] = ['type' => 'success', 'text' => "Item moved to cart!"];
-    header('Location: wishlist.php'); exit;
+    $qs = http_build_query(array_filter(['page' => $_POST['page'] ?? '']));
+    header('Location: wishlist.php' . ($qs ? "?$qs" : '')); exit;
 }
 
 $flash = $_SESSION['wishlist_msg'] ?? null;
 unset($_SESSION['wishlist_msg']);
+$items_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $items_per_page;
 
 // Fetch wishlist items
+$count_stmt = $pdo->prepare("SELECT COUNT(*) FROM wishlists WHERE customer_id = ?");
+$count_stmt->execute([$customer_id]);
+$total_items = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($total_items / $items_per_page));
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $items_per_page;
+}
+
 $stmt = $pdo->prepare("
     SELECT w.*, p.id AS product_id, p.name, p.price, p.image, p.stock, p.description,
            cat.name AS category_name, s.business_name AS seller_name
@@ -87,8 +102,12 @@ $stmt = $pdo->prepare("
     LEFT JOIN sellers s ON p.seller_id = s.id
     WHERE w.customer_id = ?
     ORDER BY w.created_at DESC
+    LIMIT ? OFFSET ?
 ");
-$stmt->execute([$customer_id]);
+$stmt->bindValue(1, $customer_id, PDO::PARAM_INT);
+$stmt->bindValue(2, $items_per_page, PDO::PARAM_INT);
+$stmt->bindValue(3, $offset, PDO::PARAM_INT);
+$stmt->execute();
 $wishlist_items = $stmt->fetchAll();
 
 // User profile pic
@@ -198,6 +217,7 @@ $u = $stmt->fetch();
                     <?php if (!empty($wishlist_items)): ?>
                         <form method="post" style="display:contents;"
                               onsubmit="return confirm('Clear all items from your wishlist?')">
+                            <input type="hidden" name="page" value="<?= $current_page ?>">
                             <button type="submit" name="clear_wishlist" class="btn-clear">
                                 🗑 Clear All
                             </button>
@@ -218,7 +238,7 @@ $u = $stmt->fetch();
             <?php if (!empty($wishlist_items)): ?>
                 <div class="wishlist-count">
                     ❤️ <span class="cnt-val"><?= count($wishlist_items) ?></span>
-                    saved item<?= count($wishlist_items) !== 1 ? 's' : '' ?>
+                    saved item<?= $total_items !== 1 ? 's' : '' ?>
                 </div>
             <?php endif; ?>
 
@@ -236,7 +256,7 @@ $u = $stmt->fetch();
                     <div class="wish-card">
 
                         <!-- Remove button -->
-                        <a href="wishlist.php?remove=<?= $item['product_id'] ?>"
+                        <a href="wishlist.php?<?= htmlspecialchars(http_build_query(['remove' => $item['product_id'], 'page' => $current_page])) ?>"
                            class="btn-remove-wish"
                            title="Remove from wishlist"
                            onclick="return confirm('Remove from wishlist?')">×</a>
@@ -284,6 +304,7 @@ $u = $stmt->fetch();
                             <form method="post" action="add_to_cart.php" style="display:contents;">
                                 <input type="hidden" name="product_id" value="<?= $item['product_id'] ?>">
                                 <input type="hidden" name="quantity" value="1">
+                                <input type="hidden" name="redirect_to" value="<?= htmlspecialchars('wishlist.php?page=' . $current_page) ?>">
                                 <button type="submit"
                                         class="btn-add-cart"
                                         <?= (int)$item['stock'] === 0 ? 'disabled' : '' ?>>
@@ -295,6 +316,7 @@ $u = $stmt->fetch();
                             <?php if ((int)$item['stock'] > 0): ?>
                             <form method="post" style="display:contents;">
                                 <input type="hidden" name="product_id" value="<?= $item['product_id'] ?>">
+                                <input type="hidden" name="page" value="<?= $current_page ?>">
                                 <button type="submit" name="move_to_cart" class="btn-move-cart">
                                     ↗ Move to Cart
                                 </button>
@@ -311,6 +333,25 @@ $u = $stmt->fetch();
                     </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if ($total_pages > 1): ?>
+                    <div class="pagination">
+                        <?php if ($current_page > 1): ?>
+                            <a class="page-link" href="?page=<?= $current_page - 1 ?>">‹</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">‹</span>
+                        <?php endif; ?>
+
+                        <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                            <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?page=<?= $page ?>"><?= $page ?></a>
+                        <?php endfor; ?>
+
+                        <?php if ($current_page < $total_pages): ?>
+                            <a class="page-link" href="?page=<?= $current_page + 1 ?>">›</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">›</span>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
 
         </div>

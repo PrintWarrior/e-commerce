@@ -5,6 +5,46 @@ require_once 'includes/functions.php';
 $category_id = $_GET['category_id'] ?? null;
 $category_name = $_GET['category'] ?? null;
 $search = $_GET['search'] ?? null;
+$products_per_page = 5;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $products_per_page;
+
+// Build shared filters for count and product queries
+$where_clause = "
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN sellers s ON p.seller_id = s.id
+    LEFT JOIN users u ON s.user_id = u.id
+    WHERE p.stock > 0
+";
+$params = [];
+
+if ($category_id) {
+    $where_clause .= " AND p.category_id = ?";
+    $params[] = $category_id;
+} elseif ($category_name) {
+    $where_clause .= " AND c.name = ?";
+    $params[] = $category_name;
+}
+
+if ($search) {
+    $where_clause .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+    $search_term = "%$search%";
+    $params[] = $search_term;
+    $params[] = $search_term;
+}
+
+// Count matching products for pagination
+$count_query = "SELECT COUNT(*) " . $where_clause;
+$count_stmt = $pdo->prepare($count_query);
+$count_stmt->execute($params);
+$total_products = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($total_products / $products_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $products_per_page;
+}
 
 // Build products query
 $query = "
@@ -12,40 +52,34 @@ $query = "
            c.name as category_name,
            s.business_name as seller_name,
            u.username as seller_username
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN sellers s ON p.seller_id = s.id
-    LEFT JOIN users u ON s.user_id = u.id
-    WHERE p.stock > 0
+    " . $where_clause . "
+    ORDER BY p.created_at DESC
+    LIMIT ? OFFSET ?
 ";
-
-$params = [];
-
-if ($category_id) {
-    $query .= " AND p.category_id = ?";
-    $params[] = $category_id;
-} elseif ($category_name) {
-    $query .= " AND c.name = ?";
-    $params[] = $category_name;
-}
-
-if ($search) {
-    $query .= " AND (p.name LIKE ? OR p.description LIKE ?)";
-    $search_term = "%$search%";
-    $params[] = $search_term;
-    $params[] = $search_term;
-}
-
-$query .= " ORDER BY p.created_at DESC";
-
 $stmt = $pdo->prepare($query);
-$stmt->execute($params);
+$product_params = [...$params, $products_per_page, $offset];
+$param_index = 1;
+foreach ($product_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $products = $stmt->fetchAll();
 
 // Get all categories for the filter sidebar
 $stmt = $pdo->prepare("SELECT id, name FROM categories ORDER BY name");
 $stmt->execute();
 $all_categories = $stmt->fetchAll();
+
+$pagination_params = [];
+if ($category_id) {
+    $pagination_params['category_id'] = $category_id;
+}
+if ($category_name) {
+    $pagination_params['category'] = $category_name;
+}
+if ($search) {
+    $pagination_params['search'] = $search;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -176,6 +210,20 @@ $all_categories = $stmt->fetchAll();
             <?php else: ?>
                 <div class="no-products">
                     No products found. <?php if ($search): ?>Try a different search term.<?php endif; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a href="browse-products.php?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>" class="page-link">Previous</a>
+                    <?php endif; ?>
+
+                    <span class="page-status">Page <?= $current_page ?> of <?= $total_pages ?></span>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a href="browse-products.php?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>" class="page-link">Next</a>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 

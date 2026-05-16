@@ -12,6 +12,9 @@ if (!$customer_id) {
 $category = trim((string)($_GET['category'] ?? ''));
 $search = trim((string)($_GET['search'] ?? ''));
 $sort = $_GET['sort'] ?? 'newest';
+$products_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $products_per_page;
 $allowedSorts = [
     'newest' => 'p.created_at DESC',
     'price_asc' => 'p.price ASC',
@@ -25,10 +28,7 @@ $orderBy = $allowedSorts[$sort] ?? $allowedSorts['newest'];
 $stmt = $pdo->query("SELECT id, name FROM categories ORDER BY name ASC");
 $categories = $stmt->fetchAll();
 
-$sql = "
-    SELECT p.id, p.name, p.description, p.price, p.stock, p.image, p.created_at,
-           c.name AS category_name,
-           CASE WHEN w.id IS NULL THEN 0 ELSE 1 END AS in_wishlist
+$sql_base = "
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN wishlists w ON w.product_id = p.id AND w.customer_id = ?
@@ -37,20 +37,42 @@ $sql = "
 $params = [$customer_id];
 
 if ($category !== '') {
-    $sql .= " AND c.name = ? ";
+    $sql_base .= " AND c.name = ? ";
     $params[] = $category;
 }
 if ($search !== '') {
-    $sql .= " AND (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ?) ";
+    $sql_base .= " AND (p.name LIKE ? OR p.description LIKE ? OR c.name LIKE ?) ";
     $like = '%' . $search . '%';
     $params[] = $like;
     $params[] = $like;
     $params[] = $like;
 }
 
-$sql .= " ORDER BY {$orderBy}";
+$count_stmt = $pdo->prepare("SELECT COUNT(*) " . $sql_base);
+$count_stmt->execute($params);
+$total_products = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($total_products / $products_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $products_per_page;
+}
+
+$sql = "
+    SELECT p.id, p.name, p.description, p.price, p.stock, p.image, p.created_at,
+           c.name AS category_name,
+           CASE WHEN w.id IS NULL THEN 0 ELSE 1 END AS in_wishlist
+    " . $sql_base . "
+    ORDER BY {$orderBy}
+    LIMIT ? OFFSET ?
+";
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params);
+$product_params = [...$params, $products_per_page, $offset];
+$param_index = 1;
+foreach ($product_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $products = $stmt->fetchAll();
 
 $flash = null;
@@ -70,8 +92,14 @@ $returnQuery = http_build_query(array_filter([
     'category' => $category,
     'search' => $search,
     'sort' => $sort !== 'newest' ? $sort : null,
+    'page' => $current_page > 1 ? $current_page : null,
 ]));
 $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
+$pagination_params = array_filter([
+    'category' => $category,
+    'search' => $search,
+    'sort' => $sort !== 'newest' ? $sort : null,
+]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -148,7 +176,7 @@ $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
                 <h1>All Products</h1>
                 <p>This page pulls directly from the `products` table and shows each product's name, description, price, stock, and image. The new heart button adds products into your wishlist flow.</p>
                 <div class="hero-stats">
-                    <div class="hero-stat"><strong><?= count($products) ?></strong><span>matching products</span></div>
+                    <div class="hero-stat"><strong><?= $total_products ?></strong><span>matching products</span></div>
                     <div class="hero-stat"><strong><?= count($categories) ?></strong><span>categories</span></div>
                     <div class="hero-stat"><strong><?= count(array_filter($products, fn($item) => (int)$item['stock'] > 0)) ?></strong><span>in stock</span></div>
                 </div>
@@ -193,7 +221,7 @@ $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
         <section class="results-bar">
             <div>
                 <h2>Products</h2>
-                <p><?= count($products) ?> item<?= count($products) !== 1 ? 's' : '' ?> found</p>
+                <p><?= $total_products ?> item<?= $total_products !== 1 ? 's' : '' ?> found</p>
             </div>
             <div class="chips">
                 <?php if ($category !== ''): ?><span class="chip">Category: <?= htmlspecialchars($category) ?></span><?php endif; ?>
@@ -259,6 +287,25 @@ $returnUrl = 'products.php' . ($returnQuery ? '?' . $returnQuery : '');
                     </article>
                 <?php endforeach; ?>
             </section>
+            <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>">‹</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">‹</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                        <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $page])) ?>"><?= $page ?></a>
+                    <?php endfor; ?>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>">›</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">›</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </main>
 

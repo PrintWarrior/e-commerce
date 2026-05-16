@@ -37,7 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_shipping'])) {
             $_SESSION['flash_error'] = "Failed to update shipping information.";
         }
     }
-    header('Location: shipping.php');
+    $qs = http_build_query(array_filter([
+        'page' => $_POST['page'] ?? '',
+    ]));
+    header('Location: shipping.php' . ($qs ? "?$qs" : ''));
     exit;
 }
 
@@ -45,15 +48,12 @@ $success = $_SESSION['flash_success'] ?? '';
 unset($_SESSION['flash_success']);
 $error = $_SESSION['flash_error'] ?? '';
 unset($_SESSION['flash_error']);
+$orders_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $orders_per_page;
 
 // Fetch active shipping orders
-$stmt = $pdo->prepare("
-    SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
-           a.barangay,
-           a.municipality,
-           a.province,
-           a.zip_code,
-           a.address_details
+$query_base = "
     FROM orders o
     JOIN order_items oi ON o.id = oi.order_id
     JOIN products p ON oi.product_id = p.id
@@ -62,9 +62,33 @@ $stmt = $pdo->prepare("
     JOIN users u ON c.user_id = u.id
     WHERE p.seller_id = ?
       AND o.status IN ('pending','processing','shipped','delivered')
+";
+
+$count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id)" . $query_base);
+$count_stmt->execute([$seller_id]);
+$filtered_total = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($filtered_total / $orders_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $orders_per_page;
+}
+
+$stmt = $pdo->prepare("
+    SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
+           a.barangay,
+           a.municipality,
+           a.province,
+           a.zip_code,
+           a.address_details
+    " . $query_base . "
     ORDER BY o.created_at DESC
+    LIMIT ? OFFSET ?
 ");
-$stmt->execute([$seller_id]);
+$stmt->bindValue(1, $seller_id, PDO::PARAM_INT);
+$stmt->bindValue(2, $orders_per_page, PDO::PARAM_INT);
+$stmt->bindValue(3, $offset, PDO::PARAM_INT);
+$stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
@@ -265,6 +289,7 @@ foreach (['pending', 'processing', 'shipped'] as $st) {
                                 <div class="ship-card-form">
                                     <form method="post">
                                         <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                        <input type="hidden" name="page" value="<?= $current_page ?>">
                                         <div class="form-row">
                                             <div class="form-group">
                                                 <label for="tracking_<?= $order['id'] ?>">Tracking Number</label>
@@ -295,6 +320,26 @@ foreach (['pending', 'processing', 'shipped'] as $st) {
 
                             </div>
                         <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($total_pages > 1): ?>
+                    <div class="pagination">
+                        <?php if ($current_page > 1): ?>
+                            <a class="page-link" href="?<?= htmlspecialchars(http_build_query(['page' => $current_page - 1])) ?>">‹</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">‹</span>
+                        <?php endif; ?>
+
+                        <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                            <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query(['page' => $page])) ?>"><?= $page ?></a>
+                        <?php endfor; ?>
+
+                        <?php if ($current_page < $total_pages): ?>
+                            <a class="page-link" href="?<?= htmlspecialchars(http_build_query(['page' => $current_page + 1])) ?>">›</a>
+                        <?php else: ?>
+                            <span class="page-link disabled">›</span>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
 

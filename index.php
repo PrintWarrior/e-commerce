@@ -2,6 +2,21 @@
 require_once 'includes/functions.php';
 // No login required, just show products
 
+$products_per_page = 5;
+$current_page = max(1, (int) ($_GET['featured_page'] ?? 1));
+$offset = ($current_page - 1) * $products_per_page;
+
+// Count available featured products for pagination
+$count_stmt = $pdo->prepare("SELECT COUNT(*) FROM products WHERE stock > 0");
+$count_stmt->execute();
+$total_products = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($total_products / $products_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $products_per_page;
+}
+
 // Fetch products with seller and category information
 $stmt = $pdo->prepare("
     SELECT p.*, 
@@ -14,7 +29,10 @@ $stmt = $pdo->prepare("
     LEFT JOIN users u ON s.user_id = u.id
     WHERE p.stock > 0
     ORDER BY p.created_at DESC
+    LIMIT ? OFFSET ?
 ");
+$stmt->bindValue(1, $products_per_page, PDO::PARAM_INT);
+$stmt->bindValue(2, $offset, PDO::PARAM_INT);
 $stmt->execute();
 $products = $stmt->fetchAll();
 
@@ -211,6 +229,20 @@ if (!empty($db_categories)) {
     </div>
 
     <!-- ── Footer ───────────────────────────────────────────────────── -->
+    <?php if ($total_pages > 1): ?>
+        <div class="pagination">
+            <?php if ($current_page > 1): ?>
+                <a href="index.php?featured_page=<?= $current_page - 1 ?>" class="page-link">Previous</a>
+            <?php endif; ?>
+
+            <span class="page-status">Page <?= $current_page ?> of <?= $total_pages ?></span>
+
+            <?php if ($current_page < $total_pages): ?>
+                <a href="index.php?featured_page=<?= $current_page + 1 ?>" class="page-link">Next</a>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
     <footer>
         <div class="inner">
             <p class="copy">Copyright &copy; 2026 All Rights Reserved by <span>Beauty Mart</span>.</p>

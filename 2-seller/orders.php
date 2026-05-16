@@ -70,11 +70,11 @@ if (isset($_POST['update_status'])) {
 
 $status_filter = $_GET['status'] ?? 'all';
 $search        = $_GET['search'] ?? '';
+$orders_per_page = 10;
+$current_page = max(1, (int) ($_GET['page'] ?? 1));
+$offset = ($current_page - 1) * $orders_per_page;
 
- $query  = "SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
-                   a.barangay, a.municipality, a.province, a.zip_code, a.address_details,
-                   pm.name AS payment_method_name
-            FROM orders o
+ $query_base  = " FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
             JOIN products p ON oi.product_id = p.id
             JOIN customers c ON o.customer_id = c.id
@@ -84,16 +84,37 @@ $search        = $_GET['search'] ?? '';
             WHERE p.seller_id = ?";
 $params = [$seller_id];
 
-if ($status_filter !== 'all') { $query .= " AND o.status = ?"; $params[] = $status_filter; }
+if ($status_filter !== 'all') { $query_base .= " AND o.status = ?"; $params[] = $status_filter; }
 if ($search) {
-    $query  .= " AND (o.id LIKE ? OR u.firstname LIKE ? OR u.lastname LIKE ?)";
+    $query_base  .= " AND (o.id LIKE ? OR u.firstname LIKE ? OR u.lastname LIKE ?)";
     $sp      = "%$search%";
     $params  = array_merge($params, [$sp, $sp, $sp]);
 }
-$query .= " ORDER BY o.created_at DESC";
+
+$count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id)" . $query_base);
+$count_stmt->execute($params);
+$filtered_total = (int) $count_stmt->fetchColumn();
+$total_pages = max(1, (int) ceil($filtered_total / $orders_per_page));
+
+if ($current_page > $total_pages) {
+    $current_page = $total_pages;
+    $offset = ($current_page - 1) * $orders_per_page;
+}
+
+ $query  = "SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
+                   a.barangay, a.municipality, a.province, a.zip_code, a.address_details,
+                   pm.name AS payment_method_name
+            " . $query_base . "
+            ORDER BY o.created_at DESC
+            LIMIT ? OFFSET ?";
 
 $stmt = $pdo->prepare($query);
-$stmt->execute($params);
+$order_params = [...$params, $orders_per_page, $offset];
+$param_index = 1;
+foreach ($order_params as $value) {
+    $stmt->bindValue($param_index++, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
+}
+$stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
@@ -103,12 +124,19 @@ foreach ($orders as &$order) {
 }
 
 // Count per status for tab badges
-$counts = ['all' => count($orders)];
+$all_count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=?");
+$all_count_stmt->execute([$seller_id]);
+$counts = ['all' => (int) $all_count_stmt->fetchColumn()];
 foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
     $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND o.status=?");
     $s->execute([$seller_id, $st]);
     $counts[$st] = (int)$s->fetchColumn();
 }
+
+$pagination_params = array_filter([
+    'status' => $status_filter !== 'all' ? $status_filter : '',
+    'search' => $search,
+]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -284,6 +312,26 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                 <?php endif; ?>
             </div>
 
+            <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($current_page > 1): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page - 1])) ?>">‹</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">‹</span>
+                    <?php endif; ?>
+
+                    <?php for ($page = 1; $page <= $total_pages; $page++): ?>
+                        <a class="page-link <?= $page === $current_page ? 'active' : '' ?>" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $page])) ?>"><?= $page ?></a>
+                    <?php endfor; ?>
+
+                    <?php if ($current_page < $total_pages): ?>
+                        <a class="page-link" href="?<?= htmlspecialchars(http_build_query([...$pagination_params, 'page' => $current_page + 1])) ?>">›</a>
+                    <?php else: ?>
+                        <span class="page-link disabled">›</span>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+
         </div><!-- /page-content -->
 
         <!-- Footer -->
@@ -313,7 +361,7 @@ foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
                      <?php if ($search): ?>
                          | Search: "<?= htmlspecialchars($search) ?>"
                      <?php endif; ?>
-                     | (<?= count($orders) ?> order<?= count($orders) === 1 ? '' : 's' ?>)
+                     | (<?= $filtered_total ?> order<?= $filtered_total === 1 ? '' : 's' ?> total)
                  </p>
              </div>
              <button type="button" class="report-close" id="report-close">&times;</button>
