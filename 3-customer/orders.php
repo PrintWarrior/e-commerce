@@ -34,9 +34,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['order_received'])) {
-        $stmt = $pdo->prepare("UPDATE orders SET status = 'completed' WHERE id = ? AND customer_id = ?");
-        $stmt->execute([$order_id, $customer_id]);
-        $_SESSION['flash_success'] = "Order #$order_id marked as received. Thank you!";
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT status FROM orders WHERE id = ? AND customer_id = ? FOR UPDATE");
+            $stmt->execute([$order_id, $customer_id]);
+            $current_status = $stmt->fetchColumn();
+
+            if ($current_status === false || !in_array($current_status, ['shipped', 'delivered', 'completed'], true)) {
+                throw new RuntimeException('This order cannot be marked as received yet.');
+            }
+
+            applyOrderStockForStatusTransition($order_id, (string) $current_status, 'completed');
+            $stmt = $pdo->prepare("UPDATE orders SET status = 'completed' WHERE id = ? AND customer_id = ?");
+            $stmt->execute([$order_id, $customer_id]);
+            $pdo->commit();
+            $_SESSION['flash_success'] = "Order #$order_id marked as received. Thank you!";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['flash_success'] = $e->getMessage();
+        }
     }
 
     if (isset($_POST['remove_from_view'])) {

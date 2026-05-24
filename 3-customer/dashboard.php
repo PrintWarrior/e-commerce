@@ -24,6 +24,8 @@ $categories = [
     ['name' => 'Skincare', 'img' => '../images/category-img/cat-skin.png'],
     ['name' => 'Tools & Accessories', 'img' => '../images/category-img/cat-tools.png'],
 ];
+
+$cartPrompt = pullCartPrompt();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -262,6 +264,7 @@ $categories = [
             </div>
         </div>
     </footer>
+    <?php renderCartPrompt($cartPrompt); ?>
 
 </body>
 

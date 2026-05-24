@@ -67,13 +67,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['register_seller'])) {
             $admins = $stmt->fetchAll(PDO::FETCH_COLUMN);
             
             // Notify admins
-            $message = "New seller registration: $username ($email) - Business: $business_name. Awaiting email verification from admin and seller application review.";
+            $message = "New seller registration: $username ($email) - Business: $business_name. Awaiting email verification and seller application review.";
             foreach ($admins as $admin_id) {
                 createNotification($admin_id, $message, 'new_seller');
             }
             
             $pdo->commit();
-            $success = "Registration successful! Please wait for an admin to send you a verification email. Once verified, we will review your seller application and notify you of approval.";
+            if (sendVerificationEmail($email, $token)) {
+                $success = "Registration successful! A verification email has been sent. Once verified, we will review your seller application and notify you of approval.";
+            } else {
+                $success = "Registration successful, but the verification email could not be sent right now. Please try the resend verification option. Once verified, we will review your seller application.";
+            }
             
             // Clear form data
             $_POST = [];

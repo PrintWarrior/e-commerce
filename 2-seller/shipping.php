@@ -24,17 +24,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_shipping'])) {
     if (!in_array($shipping_status, $allowed_shipping_statuses, true)) {
         $_SESSION['flash_error'] = "Invalid shipping status selected.";
     } else {
-        $stmt = $pdo->prepare("
-            UPDATE orders o
-            JOIN order_items oi ON o.id = oi.order_id
-            JOIN products p ON oi.product_id = p.id
-            SET o.tracking_number = ?, o.status = ?
-            WHERE o.id = ? AND p.seller_id = ?
-        ");
-        if ($stmt->execute([$tracking_number, $shipping_status, $order_id, $seller_id])) {
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("
+                SELECT o.status
+                FROM orders o
+                WHERE o.id = ?
+                  AND EXISTS (
+                      SELECT 1
+                      FROM order_items oi
+                      JOIN products p ON oi.product_id = p.id
+                      WHERE oi.order_id = o.id AND p.seller_id = ?
+                  )
+                FOR UPDATE
+            ");
+            $stmt->execute([$order_id, $seller_id]);
+            $current_status = $stmt->fetchColumn();
+
+            if ($current_status === false) {
+                throw new RuntimeException('Order not found or not assigned to this seller.');
+            }
+
+            applyOrderStockForStatusTransition($order_id, (string) $current_status, $shipping_status);
+
+            $stmt = $pdo->prepare("
+                UPDATE orders o
+                JOIN order_items oi ON o.id = oi.order_id
+                JOIN products p ON oi.product_id = p.id
+                SET o.tracking_number = ?, o.status = ?
+                WHERE o.id = ? AND p.seller_id = ?
+            ");
+            $stmt->execute([$tracking_number, $shipping_status, $order_id, $seller_id]);
+            $pdo->commit();
             $_SESSION['flash_success'] = "Shipping info for Order #$order_id updated successfully!";
-        } else {
-            $_SESSION['flash_error'] = "Failed to update shipping information.";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['flash_error'] = $e->getMessage();
         }
     }
     $qs = http_build_query(array_filter([

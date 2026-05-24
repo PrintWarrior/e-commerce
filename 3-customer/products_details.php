@@ -59,15 +59,9 @@ if (count($related_products) < 4) {
     $related_products = array_merge($related_products, $stmt->fetchAll());
 }
 
+$cartPrompt = pullCartPrompt();
 $flash = null;
-foreach (['cart_success' => 'success', 'cart_warning' => 'warning', 'cart_error' => 'error'] as $key => $type) {
-    if (isset($_SESSION[$key])) {
-        $flash = ['type' => $type, 'text' => $_SESSION[$key]];
-        unset($_SESSION[$key]);
-        break;
-    }
-}
-if (!$flash && isset($_SESSION['wishlist_msg'])) {
+if (isset($_SESSION['wishlist_msg'])) {
     $flash = $_SESSION['wishlist_msg'];
     unset($_SESSION['wishlist_msg']);
 }
@@ -251,5 +245,6 @@ $qtyValue = $product['stock'] > 0 ? 1 : 0;
             </div>
         </div>
     </footer>
+    <?php renderCartPrompt($cartPrompt); ?>
 </body>
 </html>

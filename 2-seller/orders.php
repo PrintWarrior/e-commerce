@@ -15,9 +15,30 @@ if (isset($_POST['update_status'])) {
     if (!in_array($new_status, $allowed_statuses, true)) {
         $error = "Invalid order status.";
     } else {
+        // Fetch current status first to validate the transition
+        $cur_stmt = $pdo->prepare("
+            SELECT DISTINCT o.status FROM orders o
+            JOIN order_items oi ON oi.order_id = o.id
+            JOIN products p ON p.id = oi.product_id
+            WHERE o.id = ? AND p.seller_id = ?
+        ");
+        $cur_stmt->execute([$order_id, $seller_id]);
+        $current_status = $cur_stmt->fetchColumn();
+
+        $allowed_transitions = [
+            'pending'    => ['processing', 'cancelled'],
+            'processing' => ['shipped'],
+            'shipped'    => ['completed', 'cancelled'],
+        ];
+
+        if ($current_status && isset($allowed_transitions[$current_status]) && !in_array($new_status, $allowed_transitions[$current_status], true)) {
+            $error = "Cannot change status from " . ucfirst($current_status) . " to " . ucfirst($new_status) . ".";
+        } else {
         $pdo->beginTransaction();
 
         try {
+            applyOrderStockForStatusTransition($order_id, (string) $current_status, $new_status);
+
             $stmt = $pdo->prepare("
                 UPDATE orders o
                 JOIN order_items oi ON oi.order_id = o.id
@@ -63,9 +84,10 @@ if (isset($_POST['update_status'])) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $error = "Failed to update order status.";
+            $error = $e->getMessage();
         }
-    }
+        } // end allowed_transitions check
+    } // end allowed_statuses check
 }
 
 $status_filter = $_GET['status'] ?? 'all';
@@ -105,7 +127,9 @@ if ($current_page > $total_pages) {
                    a.barangay, a.municipality, a.province, a.zip_code, a.address_details,
                    pm.name AS payment_method_name
             " . $query_base . "
-            ORDER BY o.created_at DESC
+            ORDER BY
+                FIELD(o.status, 'pending', 'processing', 'shipped', 'completed', 'cancelled'),
+                o.created_at DESC
             LIMIT ? OFFSET ?";
 
 $stmt = $pdo->prepare($query);
@@ -127,7 +151,7 @@ foreach ($orders as &$order) {
 $all_count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=?");
 $all_count_stmt->execute([$seller_id]);
 $counts = ['all' => (int) $all_count_stmt->fetchColumn()];
-foreach (['pending','completed','cancelled','processing','shipped'] as $st) {
+foreach (['pending','processing','shipped','completed','cancelled'] as $st) {
     $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND o.status=?");
     $s->execute([$seller_id, $st]);
     $counts[$st] = (int)$s->fetchColumn();
@@ -190,6 +214,7 @@ $pagination_params = array_filter([
                         'completed'  => 'Completed',
                         'cancelled'  => 'Cancelled',
                     ];
+                    // order matches: Pending > Processing > Shipped > Completed > Cancelled
                     foreach ($tabs as $val => $label):
                         $cnt = $counts[$val] ?? 0;
                     ?>
@@ -290,13 +315,35 @@ $pagination_params = array_filter([
                             <?php if (!in_array($order['status'], ['cancelled', 'completed'])): ?>
                                 <form method="post" class="status-form">
                                     <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                    <?php
+                                    // Define which statuses are selectable from each current status
+                                    $allowed_next = [
+                                        'pending'    => ['processing', 'cancelled'],
+                                        'processing' => ['shipped'],
+                                        'shipped'    => ['completed', 'cancelled'],
+                                    ];
+                                    $next_options = $allowed_next[$order['status']] ?? [];
+                                    $all_options  = [
+                                        'pending'    => 'Pending',
+                                        'processing' => 'Processing',
+                                        'shipped'    => 'Shipped',
+                                        'completed'  => 'Completed',
+                                        'cancelled'  => 'Cancelled',
+                                    ];
+                                    ?>
                                     <select name="status" required>
-                                        <option value="">Update status</option>
-                                        <option value="pending"    <?= $order['status'] === 'pending'    ? 'selected' : '' ?>>Pending</option>
-                                        <option value="processing" <?= $order['status'] === 'processing' ? 'selected' : '' ?>>Processing</option>
-                                        <option value="shipped"    <?= $order['status'] === 'shipped'    ? 'selected' : '' ?>>Shipped</option>
-                                        <option value="completed"  <?= $order['status'] === 'completed'  ? 'selected' : '' ?>>Completed</option>
-                                        <option value="cancelled"  <?= $order['status'] === 'cancelled'  ? 'selected' : '' ?>>Cancelled</option>
+                                        
+                                        <?php foreach ($all_options as $val => $label):
+                                            $is_current  = $order['status'] === $val;
+                                            $is_allowed  = in_array($val, $next_options, true);
+                                            $disabled    = (!$is_current && !$is_allowed) ? 'disabled' : '';
+                                        ?>
+                                        <option value="<?= $val ?>"
+                                                <?= $is_current ? 'selected' : '' ?>
+                                                <?= $disabled ?>>
+                                            <?= $label ?><?= $disabled ? ' —' : '' ?>
+                                        </option>
+                                        <?php endforeach; ?>
                                     </select>
                                     <button type="submit" name="update_status" class="btn-update">Update</button>
                                 </form>

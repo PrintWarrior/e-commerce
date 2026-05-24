@@ -71,13 +71,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $admins = $stmt->fetchAll(PDO::FETCH_COLUMN);
                 
                 // Notify admins
-                $message = "New customer registered: $username ($email) awaiting email verification from admin.";
+                $message = "New customer registered: $username ($email) awaiting email verification.";
                 foreach ($admins as $admin_id) {
                     createNotification($admin_id, $message, 'new_user');
                 }
                 
                 $pdo->commit();
-                $success = "Registration successful! Please wait for an admin to send you a verification email. Check your email shortly.";
+                if (sendVerificationEmail($email, $token)) {
+                    $success = "Registration successful! A verification email has been sent. Please check your inbox.";
+                } else {
+                    $success = "Registration successful, but the verification email could not be sent right now. Please try the resend verification option.";
+                }
                 
                 // Clear form data
                 $_POST = [];

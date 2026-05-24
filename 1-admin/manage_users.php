@@ -26,10 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim((string) ($_POST['username'] ?? ''));
         $email = trim((string) ($_POST['email'] ?? ''));
         $emailVerified = (int) ($_POST['email_verified'] ?? 0);
+        $selectedRole = trim((string) ($_POST['user_role'] ?? ''));
         $businessName = trim((string) ($_POST['business_name'] ?? ''));
         $businessAddress = trim((string) ($_POST['business_address'] ?? ''));
         $businessPhone = trim((string) ($_POST['business_phone'] ?? ''));
         $businessTaxId = trim((string) ($_POST['business_tax_id'] ?? ''));
+        $roleRanks = ['User' => 0, 'Customer' => 1, 'Seller' => 2, 'Admin' => 3, 'Superadmin' => 4];
 
         $errors = [];
         if ($userId <= 0) $errors[] = 'Invalid user selected.';
@@ -38,18 +40,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($username === '') $errors[] = 'Username is required.';
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Valid email is required.';
         if (!in_array($emailVerified, [0, 1], true)) $errors[] = 'Invalid email verification value.';
+        if (!isset($roleRanks[$selectedRole]) || $selectedRole === 'Superadmin') $errors[] = 'Invalid role selected.';
 
         $stmt = $pdo->prepare("
-            SELECT s.id AS seller_id
+            SELECT u.username,
+                   a.id AS admin_id,
+                   sa.id AS superadmin_id,
+                   c.id AS customer_id,
+                   s.id AS seller_id
             FROM users u
+            LEFT JOIN admins a ON a.user_id = u.id
+            LEFT JOIN superadmins sa ON sa.user_id = u.id
+            LEFT JOIN customers c ON c.user_id = u.id
             LEFT JOIN sellers s ON s.user_id = u.id
             WHERE u.id = ?
         ");
         $stmt->execute([$userId]);
         $targetRoleData = $stmt->fetch();
-        $isSellerTarget = !empty($targetRoleData['seller_id']);
+        $currentRole = 'User';
+        if ($targetRoleData) {
+            if (!empty($targetRoleData['superadmin_id'])) {
+                $currentRole = 'Superadmin';
+            } elseif (!empty($targetRoleData['admin_id'])) {
+                $currentRole = 'Admin';
+            } elseif (!empty($targetRoleData['seller_id'])) {
+                $currentRole = 'Seller';
+            } elseif (!empty($targetRoleData['customer_id'])) {
+                $currentRole = 'Customer';
+            }
+        }
+        $isSellerTarget = $selectedRole === 'Seller' || !empty($targetRoleData['seller_id']);
 
-        if ($isSellerTarget) {
+        if (!$targetRoleData) {
+            $errors[] = 'User not found.';
+        } elseif ($currentRole === 'Superadmin') {
+            $errors[] = 'Superadmin accounts cannot be changed here.';
+        } elseif ($userId === (int) $_SESSION['user_id'] && $selectedRole !== $currentRole) {
+            $errors[] = 'You cannot change your own role here.';
+        } elseif (isset($roleRanks[$selectedRole]) && $roleRanks[$selectedRole] < $roleRanks[$currentRole]) {
+            $errors[] = 'Roles can only be promoted here, not downgraded.';
+        }
+
+        if ($selectedRole === 'Seller' || $currentRole === 'Seller') {
             if ($businessName === '') $errors[] = 'Business name is required for seller accounts.';
             if ($businessAddress === '') $errors[] = 'Business address is required for seller accounts.';
             if ($businessPhone === '') $errors[] = 'Business phone is required for seller accounts.';
@@ -76,24 +108,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$firstname, $lastname, $username, $email, $emailVerified, $verificationToken, $userId]);
 
                 if ($isSellerTarget) {
-                    $pdo->prepare("
-                        UPDATE sellers
-                        SET business_name = ?, business_address = ?, phone = ?, tax_id = ?
-                        WHERE user_id = ?
-                    ")->execute([
-                        $businessName,
-                        $businessAddress,
-                        $businessPhone,
-                        $businessTaxId !== '' ? $businessTaxId : null,
-                        $userId
-                    ]);
+                    if (!empty($targetRoleData['seller_id'])) {
+                        $pdo->prepare("
+                            UPDATE sellers
+                            SET business_name = ?, business_address = ?, phone = ?, tax_id = ?
+                            WHERE user_id = ?
+                        ")->execute([
+                            $businessName,
+                            $businessAddress,
+                            $businessPhone,
+                            $businessTaxId !== '' ? $businessTaxId : null,
+                            $userId
+                        ]);
+                    } elseif ($selectedRole === 'Seller') {
+                        $pdo->prepare("
+                            INSERT INTO sellers (user_id, business_name, business_address, phone, tax_id, approved_by, approved_at)
+                            VALUES (?, ?, ?, ?, ?, ?, NOW())
+                        ")->execute([
+                            $userId,
+                            $businessName,
+                            $businessAddress,
+                            $businessPhone,
+                            $businessTaxId !== '' ? $businessTaxId : null,
+                            (int) $_SESSION['user_id']
+                        ]);
+                    }
+                }
+
+                if ($selectedRole === 'Customer' && empty($targetRoleData['customer_id'])) {
+                    $pdo->prepare("INSERT INTO customers (user_id, phone) VALUES (?, ?)")->execute([$userId, '']);
+                }
+
+                if ($selectedRole === 'Admin' && empty($targetRoleData['admin_id'])) {
+                    $pdo->prepare("INSERT INTO admins (user_id) VALUES (?)")->execute([$userId]);
                 }
 
                 logSystemEvent(
                     'admin_user_updated',
                     'users',
                     $userId,
-                    "{$viewer_label} updated account #{$userId} ({$username}).",
+                    "{$viewer_label} updated account #{$userId} ({$username}) from {$currentRole} to {$selectedRole}.",
                     (int) $_SESSION['user_id']
                 );
 
@@ -119,6 +173,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flash = ['type' => 'success', 'text' => 'User verification updated.'];
         } else {
             $flash = ['type' => 'error', 'text' => 'Invalid verification update.'];
+        }
+    }
+
+    if (isset($_POST['promote_admin'])) {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $stmt = $pdo->prepare("
+            SELECT u.username, a.id AS admin_id, sa.id AS superadmin_id
+            FROM users u
+            LEFT JOIN admins a ON a.user_id = u.id
+            LEFT JOIN superadmins sa ON sa.user_id = u.id
+            WHERE u.id = ?
+        ");
+        $stmt->execute([$userId]);
+        $target = $stmt->fetch();
+
+        if (!$target) {
+            $flash = ['type' => 'error', 'text' => 'User not found.'];
+        } elseif (!empty($target['superadmin_id'])) {
+            $flash = ['type' => 'error', 'text' => 'Superadmin accounts cannot be changed here.'];
+        } elseif (!empty($target['admin_id'])) {
+            $flash = ['type' => 'error', 'text' => 'This user is already an admin.'];
+        } else {
+            $pdo->prepare("INSERT INTO admins (user_id) VALUES (?)")->execute([$userId]);
+
+            logSystemEvent(
+                'admin_user_promoted',
+                'users',
+                $userId,
+                "{$viewer_label} promoted {$target['username']} to admin.",
+                (int) $_SESSION['user_id']
+            );
+
+            $flash = ['type' => 'success', 'text' => "{$target['username']} was promoted to admin."];
+        }
+    }
+
+    if (isset($_POST['reset_user_password'])) {
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        $newPassword = (string) ($_POST['new_password'] ?? '');
+        $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+        $stmt = $pdo->prepare("
+            SELECT u.username, sa.id AS superadmin_id
+            FROM users u
+            LEFT JOIN superadmins sa ON sa.user_id = u.id
+            WHERE u.id = ?
+        ");
+        $stmt->execute([$userId]);
+        $target = $stmt->fetch();
+
+        if (!$target) {
+            $flash = ['type' => 'error', 'text' => 'User not found.'];
+        } elseif ($userId === (int) $_SESSION['user_id']) {
+            $flash = ['type' => 'error', 'text' => 'Use your profile page to change your own password.'];
+        } elseif (!empty($target['superadmin_id'])) {
+            $flash = ['type' => 'error', 'text' => 'Superadmin passwords cannot be reset here.'];
+        } elseif (strlen($newPassword) < 6) {
+            $flash = ['type' => 'error', 'text' => 'New password must be at least 6 characters.'];
+        } elseif ($newPassword !== $confirmPassword) {
+            $flash = ['type' => 'error', 'text' => 'New passwords do not match.'];
+        } else {
+            $pdo->beginTransaction();
+
+            try {
+                $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")
+                    ->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
+                $pdo->prepare("DELETE FROM password_resets WHERE user_id = ?")->execute([$userId]);
+
+                logSystemEvent(
+                    'admin_password_reset',
+                    'users',
+                    $userId,
+                    "{$viewer_label} reset the password for {$target['username']}.",
+                    (int) $_SESSION['user_id']
+                );
+
+                $pdo->commit();
+                $flash = ['type' => 'success', 'text' => "Password reset for {$target['username']}."];
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                $flash = ['type' => 'error', 'text' => 'Failed to reset password: ' . $e->getMessage()];
+            }
         }
     }
 
@@ -640,33 +775,45 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                         </select>
                                     </div>
                                     <div class="field">
-                                        <label>Role</label>
-                                        <input type="text" value="<?= htmlspecialchars($editUser['user_role']) ?>" disabled>
-                                        <div class="field-note">Role changes are not handled here.</div>
+                                        <label for="edit_user_role">Role</label>
+                                        <?php
+                                            $editableRoleOptions = ['User', 'Customer', 'Seller', 'Admin'];
+                                            $editRoleRanks = ['User' => 0, 'Customer' => 1, 'Seller' => 2, 'Admin' => 3, 'Superadmin' => 4];
+                                            $currentEditRoleRank = $editRoleRanks[$editUser['user_role']] ?? 0;
+                                        ?>
+                                        <select id="edit_user_role" name="user_role" <?= $editUser['user_role'] === 'Superadmin' ? 'disabled' : '' ?>>
+                                            <?php if ($editUser['user_role'] === 'Superadmin'): ?>
+                                                <option value="Superadmin" selected>Superadmin</option>
+                                            <?php else: ?>
+                                                <?php foreach ($editableRoleOptions as $roleOption): ?>
+                                                    <?php if (($editRoleRanks[$roleOption] ?? 0) >= $currentEditRoleRank): ?>
+                                                        <option value="<?= $roleOption ?>" <?= $editUser['user_role'] === $roleOption ? 'selected' : '' ?>><?= $roleOption ?></option>
+                                                    <?php endif; ?>
+                                                <?php endforeach; ?>
+                                            <?php endif; ?>
+                                        </select>
+                                        <?php if ($editUser['user_role'] === 'Superadmin'): ?>
+                                            <input type="hidden" name="user_role" value="Superadmin">
+                                        <?php endif; ?>
+                                        <div class="field-note"><?= $editUser['user_role'] === 'Superadmin' ? 'Superadmin accounts are protected.' : 'Choose the same role or promote this user to a higher role.' ?></div>
                                     </div>
-                                    <?php if ($editUser['user_role'] === 'Seller'): ?>
-                                        <div class="field full">
-                                            <label for="edit_business_name">Business Name</label>
-                                            <input id="edit_business_name" type="text" name="business_name" value="<?= htmlspecialchars($editUser['business_name'] ?? '') ?>" required>
-                                        </div>
-                                        <div class="field">
-                                            <label for="edit_business_phone">Business Phone</label>
-                                            <input id="edit_business_phone" type="text" name="business_phone" value="<?= htmlspecialchars($editUser['seller_phone'] ?? '') ?>" required>
-                                        </div>
-                                        <div class="field">
-                                            <label for="edit_business_tax_id">Tax ID</label>
-                                            <input id="edit_business_tax_id" type="text" name="business_tax_id" value="<?= htmlspecialchars($editUser['tax_id'] ?? '') ?>">
-                                        </div>
-                                        <div class="field full">
-                                            <label for="edit_business_address">Business Address</label>
-                                            <textarea id="edit_business_address" name="business_address" required><?= htmlspecialchars($editUser['business_address'] ?? '') ?></textarea>
-                                        </div>
-                                    <?php else: ?>
-                                        <input type="hidden" name="business_name" value="">
-                                        <input type="hidden" name="business_phone" value="">
-                                        <input type="hidden" name="business_tax_id" value="">
-                                        <input type="hidden" name="business_address" value="">
-                                    <?php endif; ?>
+                                    <?php $showSellerFields = $editUser['user_role'] === 'Seller'; ?>
+                                    <div class="field full seller-role-field" style="<?= $showSellerFields ? '' : 'display:none;' ?>">
+                                        <label for="edit_business_name">Business Name</label>
+                                        <input id="edit_business_name" type="text" name="business_name" value="<?= htmlspecialchars($editUser['business_name'] ?? '') ?>" data-seller-required>
+                                    </div>
+                                    <div class="field seller-role-field" style="<?= $showSellerFields ? '' : 'display:none;' ?>">
+                                        <label for="edit_business_phone">Business Phone</label>
+                                        <input id="edit_business_phone" type="text" name="business_phone" value="<?= htmlspecialchars($editUser['seller_phone'] ?? '') ?>" data-seller-required>
+                                    </div>
+                                    <div class="field seller-role-field" style="<?= $showSellerFields ? '' : 'display:none;' ?>">
+                                        <label for="edit_business_tax_id">Tax ID</label>
+                                        <input id="edit_business_tax_id" type="text" name="business_tax_id" value="<?= htmlspecialchars($editUser['tax_id'] ?? '') ?>">
+                                    </div>
+                                    <div class="field full seller-role-field" style="<?= $showSellerFields ? '' : 'display:none;' ?>">
+                                        <label for="edit_business_address">Business Address</label>
+                                        <textarea id="edit_business_address" name="business_address" data-seller-required><?= htmlspecialchars($editUser['business_address'] ?? '') ?></textarea>
+                                    </div>
                                     <div class="field full">
                                         <div class="detail-actions">
                                             <button type="submit" name="save_user" class="btn-primary">Save Changes</button>
@@ -674,6 +821,27 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                         </div>
                                     </div>
                                 </form>
+                                <?php if ((int) $editUser['id'] !== (int) $_SESSION['user_id'] && $editUser['user_role'] !== 'Superadmin'): ?>
+                                    <form method="post" class="form-grid admin-tool-form" onsubmit="return confirm('Reset this user password?');">
+                                        <input type="hidden" name="user_id" value="<?= (int) $editUser['id'] ?>">
+                                        <div class="field full">
+                                            <div class="section-label">Admin Tool</div>
+                                            <h3>Reset Password</h3>
+                                            <div class="field-note">Set a new temporary password for this user.</div>
+                                        </div>
+                                        <div class="field">
+                                            <label for="reset_new_password">New Password</label>
+                                            <input id="reset_new_password" type="password" name="new_password" minlength="6" required>
+                                        </div>
+                                        <div class="field">
+                                            <label for="reset_confirm_password">Confirm Password</label>
+                                            <input id="reset_confirm_password" type="password" name="confirm_password" minlength="6" required>
+                                        </div>
+                                        <div class="field full">
+                                            <button type="submit" name="reset_user_password" class="btn-secondary">Reset Password</button>
+                                        </div>
+                                    </form>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -688,5 +856,25 @@ $current_page = basename($_SERVER['PHP_SELF']);
         </footer>
     </div>
 </div>
+<script>
+    const roleSelect = document.getElementById('edit_user_role');
+    const sellerFields = document.querySelectorAll('.seller-role-field');
+    const sellerRequiredFields = document.querySelectorAll('[data-seller-required]');
+
+    function syncSellerFields() {
+        const shouldShow = roleSelect && roleSelect.value === 'Seller';
+        sellerFields.forEach((field) => {
+            field.style.display = shouldShow ? '' : 'none';
+        });
+        sellerRequiredFields.forEach((field) => {
+            field.required = shouldShow;
+        });
+    }
+
+    if (roleSelect) {
+        roleSelect.addEventListener('change', syncSellerFields);
+        syncSellerFields();
+    }
+</script>
 </body>
 </html>

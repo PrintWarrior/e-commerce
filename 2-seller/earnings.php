@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/functions.php';
 require_once 'seller_header.php';
 

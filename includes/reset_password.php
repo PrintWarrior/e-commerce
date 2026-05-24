@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <p>Hello <strong>{$user['firstname']}</strong>,</p>
                             <p>Your password has been successfully changed.</p>
                             <p>If you did not make this change, please contact our support team immediately.</p>
-                            <p>You can now <a href='http://" . $_SERVER['HTTP_HOST'] . "/lume%20and%20co/login.php'>login with your new password</a>.</p>
+                            <p>You can now <a href='https://" . $_SERVER['HTTP_HOST'] . "/login.php'>login with your new password</a>.</p>
                         </div>
                         <div class='footer'>
                             <p>This is an automated message from Beauty Mart. Please do not reply to this email.</p>

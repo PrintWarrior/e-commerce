@@ -1,0 +1,47 @@
+Files containing localhost URLs
+================================
+
+1. includes/verify.php
+   Line 61: header('Location: http://localhost/beautymart/includes/login.php');
+   Line 146: <a href="http://localhost/beautymart/includes/login.php" class="button">Back to Login</a>
+   Line 152: <a href="http://localhost/beautymart/includes/login.php" class="button">Go to Login</a>
+
+2. includes/functions.php
+   Line 137: $link = "http://localhost/beautymart/includes/verify.php?token=$token";
+   Line 186: $link = "http://localhost/beautymart/includes/reset_password.php?token=$token";
+
+3. phpmailer/vendor/phpmailer/phpmailer/get_oauth_token.php
+   Line 25: * e.g.: http://localhost/phpmailer/get_oauth_token.php
+   Line 109: //$redirectUri = 'http://localhost/PHPMailer/redirect';
+
+
+Production URL replacements
+===========================
+
+Replace localhost Beauty Mart URLs with: https://beautymart.nmsc.online/
+
+1. includes/verify.php
+   Line 61:
+   From: header('Location: http://localhost/beautymart/includes/login.php');
+   To:   header('Location: https://beautymart.nmsc.online/includes/login.php');
+
+   Line 146:
+   From: <a href="http://localhost/beautymart/includes/login.php" class="button">Back to Login</a>
+   To:   <a href="https://beautymart.nmsc.online/includes/login.php" class="button">Back to Login</a>
+
+   Line 152:
+   From: <a href="http://localhost/beautymart/includes/login.php" class="button">Go to Login</a>
+   To:   <a href="https://beautymart.nmsc.online/includes/login.php" class="button">Go to Login</a>
+
+2. includes/functions.php
+   Line 137:
+   From: $link = "http://localhost/beautymart/includes/verify.php?token=$token";
+   To:   $link = "https://beautymart.nmsc.online/includes/verify.php?token=$token";
+
+   Line 186:
+   From: $link = "http://localhost/beautymart/includes/reset_password.php?token=$token";
+   To:   $link = "https://beautymart.nmsc.online/includes/reset_password.php?token=$token";
+
+3. phpmailer/vendor/phpmailer/phpmailer/get_oauth_token.php
+   These are PHPMailer example/comment URLs, not Beauty Mart app links.
+   No Beauty Mart production replacement needed unless this OAuth helper is configured for your site.

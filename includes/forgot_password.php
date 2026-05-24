@@ -5,12 +5,12 @@ require_once 'functions.php';
 
 $error = '';
 $success = '';
-$genericSuccessMessage = "If an account exists with this email, a password reset link has been sent.";
+$warning = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $email = trim($_POST['email']);
-    
-    // Validate email
+
+    // Validate email format
     if (empty($email)) {
         $error = "Please enter your email address.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -18,12 +18,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } else {
         try {
             // Check if user exists with this email
-            $stmt = $pdo->prepare("SELECT id, firstname, username FROM users WHERE email = ?");
+            $stmt = $pdo->prepare("SELECT id, firstname, username, email_verified FROM users WHERE email = ? AND marked_for_deletion = 0 AND deleted_at IS NULL");
             $stmt->execute([$email]);
             $user = $stmt->fetch();
 
-            if ($user) {
-                // Generate unique token
+            if (!$user) {
+                // Email not found in database
+                $error = "This email address does not exist in our records.";
+            } elseif (!$user['email_verified']) {
+                // Account exists but email is not verified
+                $warning = "Your account is not yet verified. Please check your email and verify your account before resetting your password.";
+            } else {
+                // Account exists and is verified — proceed with reset
                 $token = bin2hex(random_bytes(32));
                 $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
 
@@ -40,12 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 } else {
                     error_log('Password reset token insert failed for user ID ' . (int) $user['id']);
                 }
-            }
 
-            $success = $genericSuccessMessage;
+                $success = "A password reset link has been sent to <strong>" . htmlspecialchars($email) . "</strong>. Please check your inbox (and spam folder).";
+            }
         } catch (Throwable $e) {
             error_log('Forgot password request failed: ' . $e->getMessage());
-            $success = $genericSuccessMessage;
+            $error = "Something went wrong. Please try again later.";
         }
     }
 }
@@ -146,24 +152,44 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             transform: translateY(-2px);
         }
 
-        .error {
+        .alert {
+            padding: 14px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .alert-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+            line-height: 1.3;
+        }
+
+        .alert-error {
             background: #fed7d7;
             color: #742a2a;
             border: 1px solid #fc8181;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
         }
 
-        .success {
+        .alert-warning {
+            background: #fefcbf;
+            color: #744210;
+            border: 1px solid #f6e05e;
+        }
+
+        .alert-success {
             background: #c6f6d5;
             color: #22543d;
             border: 1px solid #9ae6b4;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
+        }
+
+        .alert-warning a {
+            color: #744210;
+            font-weight: 700;
+            text-decoration: underline;
         }
 
         .back-link {
@@ -196,33 +222,53 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="container">
         <h2>Forgot Password?</h2>
         <p class="subtitle">Enter your email address and we'll send you a link to reset your password.</p>
-        
+
         <?php if ($error): ?>
-            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <div class="alert alert-error">
+                <span class="alert-icon">✕</span>
+                <span><?= htmlspecialchars($error) ?></span>
+            </div>
         <?php endif; ?>
-        
+
+        <?php if ($warning): ?>
+            <div class="alert alert-warning">
+                <span class="alert-icon">⚠</span>
+                <span>
+                    <?= htmlspecialchars($warning) ?>
+                    <br><br>
+                    Didn't receive the verification email?
+                    <a href="resend_verification.php?email=<?= urlencode($_POST['email'] ?? '') ?>">Resend verification email</a>
+                </span>
+            </div>
+        <?php endif; ?>
+
         <?php if ($success): ?>
-            <div class="success"><?= htmlspecialchars($success) ?></div>
+            <div class="alert alert-success">
+                <span class="alert-icon">✓</span>
+                <span><?= $success ?></span>
+            </div>
         <?php endif; ?>
-        
+
+        <?php if (!$success): ?>
         <form method="post">
             <div class="form-group">
                 <label for="email">Email Address</label>
-                <input type="email" id="email" name="email" 
+                <input type="email" id="email" name="email"
                        placeholder="Enter your registered email"
                        value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
                        required>
             </div>
             <button type="submit">Send Reset Link</button>
         </form>
-        
+        <?php endif; ?>
+
         <div class="back-link">
             <a href="../index.php">← Back to Login</a>
         </div>
-        
+
         <div class="info-text">
             <p>Don't have an account? <a href="../register.php">Sign up here</a></p>
         </div>
     </div>
 </body>
-</html>
+</html> 

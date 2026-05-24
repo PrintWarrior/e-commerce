@@ -23,9 +23,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order'])) {
     $allowedStatuses = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
 
     if ($orderId > 0 && in_array($status, $allowedStatuses, true)) {
-        $pdo->prepare("UPDATE orders SET status = ?, tracking_number = ?, hidden_from_customer = ? WHERE id = ?")
-            ->execute([$status, $tracking ?: null, $hidden, $orderId]);
-        $flash = ['type' => 'success', 'text' => 'Order updated successfully.'];
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT status FROM orders WHERE id = ? FOR UPDATE");
+            $stmt->execute([$orderId]);
+            $currentStatus = $stmt->fetchColumn();
+
+            if ($currentStatus === false) {
+                throw new RuntimeException('Order not found.');
+            }
+
+            applyOrderStockForStatusTransition($orderId, (string) $currentStatus, $status);
+            $pdo->prepare("UPDATE orders SET status = ?, tracking_number = ?, hidden_from_customer = ? WHERE id = ?")
+                ->execute([$status, $tracking ?: null, $hidden, $orderId]);
+            $pdo->commit();
+            $flash = ['type' => 'success', 'text' => 'Order updated successfully.'];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $flash = ['type' => 'error', 'text' => $e->getMessage()];
+        }
     } else {
         $flash = ['type' => 'error', 'text' => 'Invalid order update.'];
     }

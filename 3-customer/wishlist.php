@@ -77,6 +77,7 @@ if (isset($_POST['move_to_cart'])) {
     header('Location: wishlist.php' . ($qs ? "?$qs" : '')); exit;
 }
 
+$cartPrompt = pullCartPrompt();
 $flash = $_SESSION['wishlist_msg'] ?? null;
 unset($_SESSION['wishlist_msg']);
 $items_per_page = 10;
@@ -369,6 +370,7 @@ $u = $stmt->fetch();
             </div>
         </div>
     </footer>
+    <?php renderCartPrompt($cartPrompt); ?>
 
 </body>
 </html>

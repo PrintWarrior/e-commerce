@@ -122,6 +122,7 @@ if (isset($_POST['update_profile'])) {
     if (empty($lastname))  $errors[] = "Last name is required.";
     if (empty($username))  $errors[] = "Username is required.";
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = "Invalid email format.";
+    if ($phone !== '' && !ctype_digit($phone)) $errors[] = "Phone number must contain numbers only.";
 
     if (empty($errors)) {
         $stmt = $pdo->prepare("SELECT id FROM users WHERE (username = ? OR email = ?) AND id != ?");
@@ -351,7 +352,9 @@ if (isset($_POST['update_profile'])) {
                 <!-- Phone -->
                 <div class="field">
                     <label for="phone">Phone</label>
-                    <input type="tel" id="phone" name="phone" placeholder="09xxxxxxxxx"
+                    <input type="text" id="phone" name="phone" placeholder="09xxxxxxxxx"
+                        inputmode="numeric" pattern="[0-9]*"
+                        oninput="this.value = this.value.replace(/[^0-9]/g, '')"
                         value="<?= htmlspecialchars($user['phone'] ?? '') ?>">
                 </div>
 

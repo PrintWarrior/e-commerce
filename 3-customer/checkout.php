@@ -23,12 +23,32 @@ $stmt = $pdo->prepare("
 $stmt->execute([$user_id]);
 $user = $stmt->fetch();
 
+$checkoutRequiredFields = [
+    'firstname' => 'First name',
+    'lastname' => 'Last name',
+    'email' => 'Email address',
+    'phone' => 'Phone number',
+    'address_details' => 'Address details',
+    'barangay' => 'Barangay',
+    'municipality' => 'Municipality',
+    'province' => 'Province',
+    'zip_code' => 'Zip code',
+];
+$missingCheckoutInfo = [];
+foreach ($checkoutRequiredFields as $field => $label) {
+    if (trim((string) ($user[$field] ?? '')) === '') {
+        $missingCheckoutInfo[] = $label;
+    }
+}
+
 // Get cart items with product details
 $stmt = $pdo->prepare("
     SELECT c.id AS cart_id, c.product_id, c.quantity,
-           p.name, p.price, p.image, p.stock
+           p.name, p.price, p.image, p.stock,
+           COALESCE(s.business_name, CONCAT('Seller #', s.id)) AS seller_name
     FROM carts c
     JOIN products p ON c.product_id = p.id
+    LEFT JOIN sellers s ON p.seller_id = s.id
     WHERE c.customer_id = ?
 ");
 $stmt->execute([$customer_id]);
@@ -45,7 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payment_method_id = getPaymentMethodId($payment_method);
     $shipping_address_id = !empty($user['address_id']) ? (int) $user['address_id'] : 0;
 
-    if ($shipping_address_id <= 0) {
+    if (!empty($missingCheckoutInfo)) {
+        $error = "Complete your customer information before placing an order.";
+    } elseif ($shipping_address_id <= 0) {
         $error = "Please set your shipping address in your profile before checking out.";
     } elseif ($payment_method_id === null) {
         $error = "Please select a valid payment method.";
@@ -59,9 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt = $pdo->prepare("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)");
         foreach ($cart_items as $item) {
             $stmt->execute([$order_id, $item['product_id'], $item['quantity'], $item['price']]);
-            // Decrement stock
-            $pdo->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?")
-                ->execute([$item['quantity'], $item['product_id'], $item['quantity']]);
         }
 
         $pdo->prepare("DELETE FROM carts WHERE customer_id = ?")->execute([$customer_id]);
@@ -195,6 +214,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="alert-error">⚠ <?= htmlspecialchars($error) ?></div>
             <?php endif; ?>
 
+            <?php if (!empty($missingCheckoutInfo)): ?>
+                <div class="completion-alert">
+                    <div>
+                        <strong>Complete your profile to continue.</strong>
+                        <p>Missing: <?= htmlspecialchars(implode(', ', $missingCheckoutInfo)) ?>.</p>
+                    </div>
+                    <a href="profile.php" class="completion-link">Update Profile</a>
+                </div>
+            <?php endif; ?>
+
             <form method="post">
                 <input type="hidden" name="payment_method" id="payment_method_input" value="cod">
 
@@ -275,10 +304,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <!-- ── Right: Order summary ────────────── -->
                     <div class="right-col">
                         <div class="order-panel">
-
-                            <!-- Place Order button -->
-                            <button type="submit" class="place-order-btn">Place Order</button>
-
                             <!-- Policy -->
                             <div class="policy-text">
                                 By placing your order, you agree to our
@@ -302,6 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         <?php endif; ?>
                                     </div>
                                     <div class="item-details">
+                                        <div class="item-shop"><?= htmlspecialchars($item['seller_name'] ?? 'Unknown Shop') ?></div>
                                         <div class="item-name"><?= htmlspecialchars($item['name']) ?></div>
                                         <div class="item-meta">
                                             Qty: <?= $item['quantity'] ?><br>
@@ -322,6 +348,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </div>
 
                         </div>
+
+                        <button type="submit" class="place-order-btn" <?= !empty($missingCheckoutInfo) ? 'disabled' : '' ?>>Place Order</button>
                     </div>
 
                 </div>

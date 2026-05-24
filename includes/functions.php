@@ -134,7 +134,7 @@ function sendEmail($to, $subject, $body) {
 
 // Send verification email
 function sendVerificationEmail($email, $token) {
-    $link = "http://localhost/lume%20and%20co/includes/verify.php?token=$token";
+    $link = "http://localhost/beautymart/includes/verify.php?token=$token";
 
     $subject = "Verify Your Email Address - Beauty Mart";
 
@@ -183,7 +183,7 @@ function sendVerificationEmail($email, $token) {
 
 // Send password reset email
 function sendPasswordResetEmail($email, $token) {
-    $link = "http://localhost/lume%20and%20co/includes/reset_password.php?token=$token";
+    $link = "http://localhost/beautymart/includes/reset_password.php?token=$token";
     $subject = "Reset Your Password - Beauty Mart";
     $body = "
         <!DOCTYPE html>
@@ -380,6 +380,206 @@ function upsertCustomerDefaultAddress(int $customerId, array $addressData): ?int
     $stmt->execute([$addressId, $customerId]);
 
     return $addressId;
+}
+
+function orderStatusConsumesStock(string $status): bool {
+    return in_array($status, ['delivered', 'completed'], true);
+}
+
+// Deduct product stock once when an order first reaches delivery completion.
+function applyOrderStockForStatusTransition(int $orderId, string $currentStatus, string $newStatus): void {
+    global $pdo;
+
+    $stockAlreadyConsumed = orderStatusConsumesStock($currentStatus);
+    $willConsumeStock = orderStatusConsumesStock($newStatus);
+
+    if ($stockAlreadyConsumed && !$willConsumeStock) {
+        throw new RuntimeException('Delivered or completed orders cannot return to an active status.');
+    }
+
+    if (!$willConsumeStock || $stockAlreadyConsumed) {
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT product_id, SUM(quantity) AS ordered_quantity
+        FROM order_items
+        WHERE order_id = ?
+        GROUP BY product_id
+    ");
+    $stmt->execute([$orderId]);
+    $items = $stmt->fetchAll();
+
+    if (empty($items)) {
+        throw new RuntimeException('This order has no items to fulfill.');
+    }
+
+    $stockUpdate = $pdo->prepare("
+        UPDATE products
+        SET stock = stock - ?
+        WHERE id = ? AND stock >= ?
+    ");
+
+    foreach ($items as $item) {
+        $quantity = (int) $item['ordered_quantity'];
+        $stockUpdate->execute([$quantity, (int) $item['product_id'], $quantity]);
+
+        if ($stockUpdate->rowCount() === 0) {
+            throw new RuntimeException('Not enough stock is available to complete this order.');
+        }
+    }
+}
+
+// Pull cart feedback once after add_to_cart.php redirects back to a page.
+function pullCartPrompt(): ?array {
+    foreach (['cart_success' => 'success', 'cart_warning' => 'warning', 'cart_error' => 'error'] as $key => $type) {
+        if (!isset($_SESSION[$key])) {
+            continue;
+        }
+
+        $prompt = ['type' => $type, 'text' => (string) $_SESSION[$key]];
+        unset($_SESSION[$key]);
+        return $prompt;
+    }
+
+    return null;
+}
+
+function renderCartPrompt(?array $prompt): void {
+    if (!$prompt) {
+        return;
+    }
+
+    $type = in_array($prompt['type'] ?? '', ['success', 'warning', 'error'], true)
+        ? $prompt['type']
+        : 'success';
+    $title = $type === 'success' ? 'Cart Updated' : ($type === 'warning' ? 'Cart Notice' : 'Cart Update Failed');
+    ?>
+    <style>
+        .cart-prompt {
+            background: #fff;
+            border: 0;
+            border-radius: 8px;
+            box-shadow: 0 24px 80px rgba(32, 25, 42, .28);
+            color: #2d3748;
+            inset: 0;
+            letter-spacing: 0;
+            margin: auto;
+            max-height: calc(100vh - 32px);
+            max-width: min(420px, calc(100vw - 32px));
+            overflow: auto;
+            padding: 0;
+            position: fixed;
+            text-align: center;
+            width: 100%;
+        }
+
+        .cart-prompt::backdrop {
+            background: rgba(27, 24, 34, .48);
+        }
+
+        .cart-prompt-card {
+            padding: 28px;
+        }
+
+        .cart-prompt-mark {
+            align-items: center;
+            background: #eaf8ef;
+            border: 2px solid #b6e3c6;
+            border-radius: 50%;
+            color: #207245;
+            display: inline-flex;
+            font-size: 28px;
+            font-weight: 800;
+            height: 64px;
+            justify-content: center;
+            line-height: 1;
+            margin-bottom: 16px;
+            width: 64px;
+        }
+
+        .cart-prompt.warning .cart-prompt-mark {
+            background: #fff7e5;
+            border-color: #f1d38a;
+            color: #8b6100;
+        }
+
+        .cart-prompt.error .cart-prompt-mark {
+            background: #fdecec;
+            border-color: #efb5b5;
+            color: #b53a3a;
+        }
+
+        .cart-prompt h2 {
+            font-size: 25px;
+            line-height: 1.2;
+            margin: 0 0 10px;
+        }
+
+        .cart-prompt p {
+            color: #556070;
+            line-height: 1.5;
+            margin: 0 0 22px;
+        }
+
+        .cart-prompt-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .cart-prompt-actions a,
+        .cart-prompt-actions button {
+            align-items: center;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            font: inherit;
+            font-weight: 800;
+            justify-content: center;
+            min-height: 42px;
+            min-width: 128px;
+            padding: 0 16px;
+            text-decoration: none;
+        }
+
+        .cart-prompt-actions a {
+            background: #df3d78;
+            border: 1px solid #df3d78;
+            color: #fff;
+        }
+
+        .cart-prompt-actions button {
+            background: #fff;
+            border: 1px solid #d7dce4;
+            color: #374151;
+        }
+    </style>
+    <dialog class="cart-prompt <?= htmlspecialchars($type) ?>" id="cart-feedback-prompt" aria-labelledby="cart-feedback-title">
+        <div class="cart-prompt-card">
+            <div class="cart-prompt-mark" aria-hidden="true"><?= $type === 'success' ? '&#10003;' : '!' ?></div>
+            <h2 id="cart-feedback-title"><?= htmlspecialchars($title) ?></h2>
+            <p><?= htmlspecialchars((string) $prompt['text']) ?></p>
+            <div class="cart-prompt-actions">
+                <a href="cart.php">View Cart</a>
+                <form method="dialog">
+                    <button type="submit">Continue Shopping</button>
+                </form>
+            </div>
+        </div>
+    </dialog>
+    <script>
+        (() => {
+            const prompt = document.getElementById('cart-feedback-prompt');
+            if (prompt && typeof prompt.showModal === 'function') {
+                prompt.showModal();
+            } else if (prompt) {
+                prompt.setAttribute('open', 'open');
+            }
+        })();
+    </script>
+    <?php
 }
 
 // Create notification for any user
