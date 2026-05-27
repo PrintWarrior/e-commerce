@@ -45,11 +45,13 @@ foreach ($checkoutRequiredFields as $field => $label) {
 $stmt = $pdo->prepare("
     SELECT c.id AS cart_id, c.product_id, c.quantity,
            p.name, p.price, p.image, p.stock,
+           s.id AS seller_id,
            COALESCE(s.business_name, CONCAT('Seller #', s.id)) AS seller_name
     FROM carts c
     JOIN products p ON c.product_id = p.id
     LEFT JOIN sellers s ON p.seller_id = s.id
     WHERE c.customer_id = ?
+    ORDER BY s.id, p.name
 ");
 $stmt->execute([$customer_id]);
 $cart_items = $stmt->fetchAll();
@@ -57,6 +59,22 @@ $cart_items = $stmt->fetchAll();
 if (empty($cart_items)) redirect('cart.php');
 
 $total = array_sum(array_map(fn($i) => $i['price'] * $i['quantity'], $cart_items));
+
+$grouped_cart_items = [];
+foreach ($cart_items as $item) {
+    $seller_key = $item['seller_id'] ?? 'unknown';
+
+    if (!isset($grouped_cart_items[$seller_key])) {
+        $grouped_cart_items[$seller_key] = [
+            'seller_name' => $item['seller_name'] ?? 'Unknown Shop',
+            'items' => [],
+            'subtotal' => 0,
+        ];
+    }
+
+    $grouped_cart_items[$seller_key]['items'][] = $item;
+    $grouped_cart_items[$seller_key]['subtotal'] += $item['price'] * $item['quantity'];
+}
 
 $error = '';
 
@@ -316,26 +334,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             <!-- Items -->
                             <div class="order-items">
-                                <?php foreach ($cart_items as $item): ?>
-                                <div class="order-item">
-                                    <div class="item-thumb">
-                                        <?php if (!empty($item['image']) && file_exists("../product_images/" . $item['image'])): ?>
-                                            <img src="../product_images/<?= htmlspecialchars($item['image']) ?>"
-                                                 alt="<?= htmlspecialchars($item['name']) ?>">
-                                        <?php else: ?>
-                                            🛍️
-                                        <?php endif; ?>
+                                <?php foreach ($grouped_cart_items as $group): ?>
+                                <div class="order-seller-box">
+                                    <div class="order-seller-header">
+                                        <span><?= htmlspecialchars($group['seller_name']) ?></span>
+                                        <span><?= count($group['items']) ?> item<?= count($group['items']) === 1 ? '' : 's' ?></span>
                                     </div>
-                                    <div class="item-details">
-                                        <div class="item-shop"><?= htmlspecialchars($item['seller_name'] ?? 'Unknown Shop') ?></div>
-                                        <div class="item-name"><?= htmlspecialchars($item['name']) ?></div>
-                                        <div class="item-meta">
-                                            Qty: <?= $item['quantity'] ?><br>
-                                            Price: ₱<?= number_format($item['price'], 2) ?>
+                                    <?php foreach ($group['items'] as $item): ?>
+                                    <div class="order-item">
+                                        <div class="item-thumb">
+                                            <?php if (!empty($item['image']) && file_exists("../product_images/" . $item['image'])): ?>
+                                                <img src="../product_images/<?= htmlspecialchars($item['image']) ?>"
+                                                     alt="<?= htmlspecialchars($item['name']) ?>">
+                                            <?php else: ?>
+                                                🛍️
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="item-details">
+                                            <div class="item-name"><?= htmlspecialchars($item['name']) ?></div>
+                                            <div class="item-meta">
+                                                Qty: <?= $item['quantity'] ?><br>
+                                                Price: &#8369;<?= number_format($item['price'], 2) ?>
+                                            </div>
+                                        </div>
+                                        <div class="item-price">
+                                            &#8369;<?= number_format($item['price'] * $item['quantity'], 2) ?>
                                         </div>
                                     </div>
-                                    <div class="item-price">
-                                        ₱<?= number_format($item['price'] * $item['quantity'], 2) ?>
+                                    <?php endforeach; ?>
+                                    <div class="order-seller-total">
+                                        <span>Store Total</span>
+                                        <span>&#8369;<?= number_format($group['subtotal'], 2) ?></span>
                                     </div>
                                 </div>
                                 <?php endforeach; ?>

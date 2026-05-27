@@ -3,6 +3,7 @@ require_once '../includes/functions.php';
 require_once 'seller_header.php';
 
 $seller_id = $seller['seller_id'];
+ensureOrderItemFulfillmentColumns();
 
 $status_labels = [
     'pending' => '⏳ Pending',
@@ -27,34 +28,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_shipping'])) {
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare("
-                SELECT o.status
-                FROM orders o
-                WHERE o.id = ?
-                  AND EXISTS (
-                      SELECT 1
-                      FROM order_items oi
-                      JOIN products p ON oi.product_id = p.id
-                      WHERE oi.order_id = o.id AND p.seller_id = ?
-                  )
+                SELECT DISTINCT oi.status
+                FROM order_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = ? AND p.seller_id = ?
                 FOR UPDATE
             ");
             $stmt->execute([$order_id, $seller_id]);
-            $current_status = $stmt->fetchColumn();
+            $seller_statuses = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $current_status = count($seller_statuses) === 1 ? $seller_statuses[0] : false;
 
             if ($current_status === false) {
                 throw new RuntimeException('Order not found or not assigned to this seller.');
             }
 
-            applyOrderStockForStatusTransition($order_id, (string) $current_status, $shipping_status);
+            $allowed_transitions = [
+                'pending' => ['pending', 'processing', 'cancelled'],
+                'processing' => ['processing', 'shipped'],
+                'shipped' => ['shipped', 'delivered'],
+                'delivered' => ['delivered', 'completed'],
+                'completed' => ['completed'],
+                'cancelled' => ['cancelled'],
+            ];
+
+            if (!in_array($shipping_status, $allowed_transitions[(string) $current_status] ?? [], true)) {
+                throw new RuntimeException('Cannot change status from ' . ucfirst((string) $current_status) . ' to ' . ucfirst($shipping_status) . '.');
+            }
+
+            applyOrderStockForSellerStatusTransition($order_id, $seller_id, (string) $current_status, $shipping_status);
 
             $stmt = $pdo->prepare("
-                UPDATE orders o
-                JOIN order_items oi ON o.id = oi.order_id
+                UPDATE order_items oi
                 JOIN products p ON oi.product_id = p.id
-                SET o.tracking_number = ?, o.status = ?
-                WHERE o.id = ? AND p.seller_id = ?
+                SET oi.tracking_number = ?, oi.status = ?
+                WHERE oi.order_id = ? AND p.seller_id = ?
             ");
             $stmt->execute([$tracking_number, $shipping_status, $order_id, $seller_id]);
+            syncOrderStatusFromItems($order_id);
             $pdo->commit();
             $_SESSION['flash_success'] = "Shipping info for Order #$order_id updated successfully!";
         } catch (Throwable $e) {
@@ -89,6 +99,7 @@ $query_base = "
     JOIN users u ON c.user_id = u.id
     WHERE p.seller_id = ?
       AND o.status IN ('pending','processing','shipped','delivered')
+      AND oi.status IN ('pending','processing','shipped','delivered')
 ";
 
 $count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id)" . $query_base);
@@ -102,13 +113,16 @@ if ($current_page > $total_pages) {
 }
 
 $stmt = $pdo->prepare("
-    SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
+    SELECT o.*, u.firstname, u.lastname, u.email,
            a.barangay,
            a.municipality,
            a.province,
            a.zip_code,
-           a.address_details
+           a.address_details,
+           MIN(oi.status) AS seller_status,
+           MAX(oi.tracking_number) AS seller_tracking_number
     " . $query_base . "
+    GROUP BY o.id
     ORDER BY o.created_at DESC
     LIMIT ? OFFSET ?
 ");
@@ -119,6 +133,8 @@ $stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
+    $order['status'] = $order['seller_status'] ?? $order['status'];
+    $order['tracking_number'] = $order['seller_tracking_number'] ?? $order['tracking_number'];
     $order['shipping_address'] = [
         'barangay' => $order['barangay'] ?? '',
         'municipality' => $order['municipality'] ?? '',
@@ -135,11 +151,12 @@ foreach ($orders as &$order) {
     $s->execute([$order['id'], $seller_id]);
     $order['items'] = $s->fetchAll();
 }
+unset($order);
 
 // Summary counts
 $counts = [];
 foreach (['pending', 'processing', 'shipped'] as $st) {
-    $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND o.status=?");
+    $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND oi.status=?");
     $s->execute([$seller_id, $st]);
     $counts[$st] = (int) $s->fetchColumn();
 }

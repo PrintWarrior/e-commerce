@@ -301,7 +301,63 @@
         }
         .prod-name { font-weight: 800; color: var(--text-dark); line-height: 1.3; }
         .prod-seller { font-size: 11.5px; color: var(--pink-accent); font-weight: 600; margin-top: 2px; }
+        .prod-meta { font-size: 12px; color: var(--text-muted); font-weight: 700; margin-top: 3px; }
         .subtotal-cell { font-weight: 800; color: var(--pink-accent); }
+
+        .seller-group-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px;
+        }
+
+        .seller-order-box {
+            border: 1.5px solid var(--pink-mid);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            background: var(--white);
+        }
+
+        .seller-order-header,
+        .seller-order-total {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 800;
+        }
+
+        .seller-order-header {
+            padding: 11px 14px;
+            background: var(--pink-pale);
+            border-bottom: 1.5px solid var(--pink-mid);
+            font-size: 13.5px;
+            color: var(--text-dark);
+        }
+
+        .seller-order-header span:last-child {
+            color: var(--text-muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .seller-order-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 14px;
+            padding: 13px 14px;
+            border-bottom: 1px solid #f5eef0;
+        }
+
+        .seller-order-total {
+            padding: 11px 14px;
+            background: var(--pink-soft);
+            color: var(--text-dark);
+            font-size: 13px;
+        }
+
+        .seller-order-total span:last-child { color: var(--pink-accent); }
 
         /* ── Summary card ───────────────────────────────────── */
         .summary-card {

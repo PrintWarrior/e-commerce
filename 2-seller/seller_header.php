@@ -21,6 +21,7 @@ $stmt->execute([$_SESSION['user_id']]);
 $seller = $stmt->fetch();
 
 $seller_id = $seller['seller_id'];
+ensureOrderItemFulfillmentColumns();
 
 // Get unread notifications count
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -33,7 +34,7 @@ $stmt = $pdo->prepare("
     FROM orders o 
     JOIN order_items oi ON o.id = oi.order_id 
     JOIN products p ON oi.product_id = p.id 
-    WHERE p.seller_id = ? AND o.status = 'pending'
+    WHERE p.seller_id = ? AND oi.status = 'pending'
 ");
 $stmt->execute([$seller_id]);
 $pending_orders = $stmt->fetchColumn();

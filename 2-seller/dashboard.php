@@ -9,7 +9,7 @@ $seller_id = $seller_record['id'];
 
 $today = date('Y-m-d');
 
-$stmt = $pdo->prepare("SELECT SUM(oi.quantity * oi.price) as total_sales FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND o.status = 'completed'");
+$stmt = $pdo->prepare("SELECT SUM(oi.quantity * oi.price) as total_sales FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND oi.status = 'completed'");
 $stmt->execute([$seller_id]);
 $total_sales = $stmt->fetchColumn() ?? 0;
 
@@ -17,7 +17,7 @@ $stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_item
 $stmt->execute([$seller_id]);
 $total_orders = $stmt->fetchColumn() ?? 0;
 
-$stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND o.status = 'pending'");
+$stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id = oi.order_id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND oi.status = 'pending'");
 $stmt->execute([$seller_id]);
 $pending_orders = $stmt->fetchColumn() ?? 0;
 
@@ -35,7 +35,7 @@ for ($i = 6; $i >= 0; $i--) {
     $date = date('Y-m-d', strtotime("-$i days"));
     $label = $i === 0 ? 'Today' : ($i === 1 ? 'Yesterday' : date('M d', strtotime("-$i days")));
     $sales_labels[] = $label;
-    $stmt = $pdo->prepare("SELECT SUM(oi.quantity * oi.price) FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND DATE(o.created_at) = ? AND o.status = 'completed'");
+    $stmt = $pdo->prepare("SELECT SUM(oi.quantity * oi.price) FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN products p ON oi.product_id = p.id WHERE p.seller_id = ? AND DATE(o.created_at) = ? AND oi.status = 'completed'");
     $stmt->execute([$seller_id, $date]);
     $sales_data[] = (float)($stmt->fetchColumn() ?? 0);
 }

@@ -383,10 +383,117 @@ function upsertCustomerDefaultAddress(int $customerId, array $addressData): ?int
 }
 
 function orderStatusConsumesStock(string $status): bool {
-    return in_array($status, ['delivered', 'completed'], true);
+    return in_array($status, ['processing', 'shipped', 'delivered', 'completed'], true);
 }
 
-// Deduct product stock once when an order first reaches delivery completion.
+function ensureOrderItemFulfillmentColumns(): void {
+    global $pdo;
+
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+
+    $statusExists = false;
+    $trackingExists = false;
+
+    try {
+        $stmt = $pdo->query("SHOW COLUMNS FROM order_items LIKE 'status'");
+        $statusExists = (bool) $stmt->fetch();
+
+        $stmt = $pdo->query("SHOW COLUMNS FROM order_items LIKE 'tracking_number'");
+        $trackingExists = (bool) $stmt->fetch();
+
+        if (!$statusExists) {
+            $pdo->exec("ALTER TABLE order_items ADD status ENUM('pending','processing','shipped','delivered','completed','cancelled') DEFAULT 'pending' AFTER price");
+            $pdo->exec("
+                UPDATE order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                SET oi.status = CASE WHEN o.status = 'paid' THEN 'completed' ELSE o.status END
+            ");
+        }
+
+        if (!$trackingExists) {
+            $pdo->exec("ALTER TABLE order_items ADD tracking_number VARCHAR(100) DEFAULT NULL AFTER status");
+            $pdo->exec("
+                UPDATE order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                SET oi.tracking_number = o.tracking_number
+                WHERE o.tracking_number IS NOT NULL
+            ");
+        }
+    } catch (Throwable $e) {
+        throw new RuntimeException('Unable to prepare per-seller order status columns: ' . $e->getMessage());
+    }
+
+    $checked = true;
+}
+
+function deriveOrderStatusFromItemStatuses(int $orderId): string {
+    global $pdo;
+
+    ensureOrderItemFulfillmentColumns();
+
+    $stmt = $pdo->prepare("
+        SELECT status, COUNT(*) AS status_count
+        FROM order_items
+        WHERE order_id = ?
+        GROUP BY status
+    ");
+    $stmt->execute([$orderId]);
+    $counts = [];
+
+    foreach ($stmt->fetchAll() as $row) {
+        $counts[(string) $row['status']] = (int) $row['status_count'];
+    }
+
+    if (empty($counts)) {
+        return 'pending';
+    }
+
+    if (count($counts) === 1) {
+        return array_key_first($counts);
+    }
+
+    $activeCounts = $counts;
+    unset($activeCounts['cancelled']);
+
+    if (empty($activeCounts)) {
+        return 'cancelled';
+    }
+
+    if (!empty($activeCounts['pending'])) {
+        return 'pending';
+    }
+
+    if (!empty($activeCounts['processing'])) {
+        return 'processing';
+    }
+
+    if (!empty($activeCounts['shipped'])) {
+        return 'shipped';
+    }
+
+    if (!empty($activeCounts['delivered'])) {
+        return 'delivered';
+    }
+
+    if (!empty($activeCounts['completed'])) {
+        return 'completed';
+    }
+
+    return 'pending';
+}
+
+function syncOrderStatusFromItems(int $orderId): void {
+    global $pdo;
+
+    $status = deriveOrderStatusFromItemStatuses($orderId);
+    $stmt = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
+    $stmt->execute([$status, $orderId]);
+}
+
+// Deduct product stock once when an order first enters fulfillment.
 function applyOrderStockForStatusTransition(int $orderId, string $currentStatus, string $newStatus): void {
     global $pdo;
 
@@ -394,7 +501,7 @@ function applyOrderStockForStatusTransition(int $orderId, string $currentStatus,
     $willConsumeStock = orderStatusConsumesStock($newStatus);
 
     if ($stockAlreadyConsumed && !$willConsumeStock) {
-        throw new RuntimeException('Delivered or completed orders cannot return to an active status.');
+        throw new RuntimeException('Orders already in fulfillment cannot return to a non-fulfillment status.');
     }
 
     if (!$willConsumeStock || $stockAlreadyConsumed) {
@@ -426,6 +533,50 @@ function applyOrderStockForStatusTransition(int $orderId, string $currentStatus,
 
         if ($stockUpdate->rowCount() === 0) {
             throw new RuntimeException('Not enough stock is available to complete this order.');
+        }
+    }
+}
+
+function applyOrderStockForSellerStatusTransition(int $orderId, int $sellerId, string $currentStatus, string $newStatus): void {
+    global $pdo;
+
+    $stockAlreadyConsumed = orderStatusConsumesStock($currentStatus);
+    $willConsumeStock = orderStatusConsumesStock($newStatus);
+
+    if ($stockAlreadyConsumed && !$willConsumeStock) {
+        throw new RuntimeException('Orders already in fulfillment cannot return to a non-fulfillment status.');
+    }
+
+    if (!$willConsumeStock || $stockAlreadyConsumed) {
+        return;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT oi.product_id, SUM(oi.quantity) AS ordered_quantity
+        FROM order_items oi
+        JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = ? AND p.seller_id = ?
+        GROUP BY oi.product_id
+    ");
+    $stmt->execute([$orderId, $sellerId]);
+    $items = $stmt->fetchAll();
+
+    if (empty($items)) {
+        throw new RuntimeException('This order has no items for this seller.');
+    }
+
+    $stockUpdate = $pdo->prepare("
+        UPDATE products
+        SET stock = stock - ?
+        WHERE id = ? AND stock >= ?
+    ");
+
+    foreach ($items as $item) {
+        $quantity = (int) $item['ordered_quantity'];
+        $stockUpdate->execute([$quantity, (int) $item['product_id'], $quantity]);
+
+        if ($stockUpdate->rowCount() === 0) {
+            throw new RuntimeException('Not enough stock is available to process this order.');
         }
     }
 }

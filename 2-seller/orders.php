@@ -3,6 +3,7 @@ require_once '../includes/functions.php';
 require_once 'seller_header.php';
 
 $seller_id = $seller['seller_id'];
+ensureOrderItemFulfillmentColumns();
 $success = '';
 $error   = '';
 
@@ -15,42 +16,46 @@ if (isset($_POST['update_status'])) {
     if (!in_array($new_status, $allowed_statuses, true)) {
         $error = "Invalid order status.";
     } else {
-        // Fetch current status first to validate the transition
+        // Fetch this seller's current status for the order.
         $cur_stmt = $pdo->prepare("
-            SELECT DISTINCT o.status FROM orders o
+            SELECT DISTINCT oi.status FROM orders o
             JOIN order_items oi ON oi.order_id = o.id
             JOIN products p ON p.id = oi.product_id
             WHERE o.id = ? AND p.seller_id = ?
         ");
         $cur_stmt->execute([$order_id, $seller_id]);
-        $current_status = $cur_stmt->fetchColumn();
+        $seller_statuses = $cur_stmt->fetchAll(PDO::FETCH_COLUMN);
+        $current_status = count($seller_statuses) === 1 ? $seller_statuses[0] : false;
 
         $allowed_transitions = [
             'pending'    => ['processing', 'cancelled'],
             'processing' => ['shipped'],
-            'shipped'    => ['completed', 'cancelled'],
+            'shipped'    => ['completed'],
         ];
 
-        if ($current_status && isset($allowed_transitions[$current_status]) && !in_array($new_status, $allowed_transitions[$current_status], true)) {
+        if ($current_status === false) {
+            $error = "Order not found or has mixed item statuses for this seller.";
+        } elseif (isset($allowed_transitions[$current_status]) && !in_array($new_status, $allowed_transitions[$current_status], true)) {
             $error = "Cannot change status from " . ucfirst($current_status) . " to " . ucfirst($new_status) . ".";
         } else {
         $pdo->beginTransaction();
 
         try {
-            applyOrderStockForStatusTransition($order_id, (string) $current_status, $new_status);
+            applyOrderStockForSellerStatusTransition($order_id, $seller_id, (string) $current_status, $new_status);
 
             $stmt = $pdo->prepare("
-                UPDATE orders o
-                JOIN order_items oi ON oi.order_id = o.id
+                UPDATE order_items oi
                 JOIN products p ON p.id = oi.product_id
-                SET o.status = ?
-                WHERE o.id = ? AND p.seller_id = ?
+                SET oi.status = ?
+                WHERE oi.order_id = ? AND p.seller_id = ?
             ");
             $stmt->execute([$new_status, $order_id, $seller_id]);
 
             if ($stmt->rowCount() === 0) {
                 throw new RuntimeException('Order not found or not assigned to this seller.');
             }
+
+            syncOrderStatusFromItems($order_id);
 
             if ($new_status === 'completed') {
                 $getOrder = $pdo->prepare("
@@ -65,8 +70,8 @@ if (isset($_POST['update_status'])) {
                 $orderData = $getOrder->fetch();
 
                 if ($orderData) {
-                    $check = $pdo->prepare("SELECT COUNT(*) FROM seller_earnings WHERE order_id = ?");
-                    $check->execute([$order_id]);
+                    $check = $pdo->prepare("SELECT COUNT(*) FROM seller_earnings WHERE seller_id = ? AND order_id = ?");
+                    $check->execute([$seller_id, $order_id]);
 
                     if ((int)$check->fetchColumn() === 0) {
                         $insert = $pdo->prepare("
@@ -106,7 +111,7 @@ $offset = ($current_page - 1) * $orders_per_page;
             WHERE p.seller_id = ?";
 $params = [$seller_id];
 
-if ($status_filter !== 'all') { $query_base .= " AND o.status = ?"; $params[] = $status_filter; }
+if ($status_filter !== 'all') { $query_base .= " AND oi.status = ?"; $params[] = $status_filter; }
 if ($search) {
     $query_base  .= " AND (o.id LIKE ? OR u.firstname LIKE ? OR u.lastname LIKE ?)";
     $sp      = "%$search%";
@@ -123,12 +128,15 @@ if ($current_page > $total_pages) {
     $offset = ($current_page - 1) * $orders_per_page;
 }
 
- $query  = "SELECT DISTINCT o.*, u.firstname, u.lastname, u.email,
+ $query  = "SELECT o.*, u.firstname, u.lastname, u.email,
                    a.barangay, a.municipality, a.province, a.zip_code, a.address_details,
-                   pm.name AS payment_method_name
+                   pm.name AS payment_method_name,
+                   MIN(oi.status) AS seller_status,
+                   SUM(oi.quantity * oi.price) AS seller_total
             " . $query_base . "
+            GROUP BY o.id
             ORDER BY
-                FIELD(o.status, 'pending', 'processing', 'shipped', 'completed', 'cancelled'),
+                FIELD(MIN(oi.status), 'pending', 'processing', 'shipped', 'completed', 'cancelled'),
                 o.created_at DESC
             LIMIT ? OFFSET ?";
 
@@ -142,17 +150,19 @@ $stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
+    $order['status'] = $order['seller_status'] ?? $order['status'];
     $s = $pdo->prepare("SELECT oi.*, p.name FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ? AND p.seller_id = ?");
     $s->execute([$order['id'], $seller_id]);
     $order['items'] = $s->fetchAll();
 }
+unset($order);
 
 // Count per status for tab badges
 $all_count_stmt = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=?");
 $all_count_stmt->execute([$seller_id]);
 $counts = ['all' => (int) $all_count_stmt->fetchColumn()];
 foreach (['pending','processing','shipped','completed','cancelled'] as $st) {
-    $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND o.status=?");
+    $s = $pdo->prepare("SELECT COUNT(DISTINCT o.id) FROM orders o JOIN order_items oi ON o.id=oi.order_id JOIN products p ON oi.product_id=p.id WHERE p.seller_id=? AND oi.status=?");
     $s->execute([$seller_id, $st]);
     $counts[$st] = (int)$s->fetchColumn();
 }
@@ -275,7 +285,7 @@ $pagination_params = array_filter([
                                     <?= ucfirst($order['status']) ?>
                                 </span>
                                 <span class="order-total-chip">
-                                    <?= number_format($order['total_amount'], 2) ?>
+                                    <?= number_format((float) $order['seller_total'], 2) ?>
                                 </span>
                             </div>
                         </div>
@@ -303,8 +313,8 @@ $pagination_params = array_filter([
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <td colspan="3" class="total-label">Order Total</td>
-                                        <td class="total-amount"><?= number_format($order['total_amount'], 2) ?></td>
+                                        <td colspan="3" class="total-label">Store Total</td>
+                                        <td class="total-amount"><?= number_format((float) $order['seller_total'], 2) ?></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -320,7 +330,7 @@ $pagination_params = array_filter([
                                     $allowed_next = [
                                         'pending'    => ['processing', 'cancelled'],
                                         'processing' => ['shipped'],
-                                        'shipped'    => ['completed', 'cancelled'],
+                                        'shipped'    => ['completed'],
                                     ];
                                     $next_options = $allowed_next[$order['status']] ?? [];
                                     $all_options  = [

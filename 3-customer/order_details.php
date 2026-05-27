@@ -5,6 +5,7 @@ if (!isLoggedIn() || !isVerified()) redirect('../login.php');
 $order_id    = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $customer_id = getCustomerId($_SESSION['user_id']);
 if (!$customer_id) redirect('dashboard.php');
+ensureOrderItemFulfillmentColumns();
 
 // Fetch order
 $stmt = $pdo->prepare("
@@ -28,14 +29,55 @@ $shipping_address = [
 
 // Fetch order items
 $stmt = $pdo->prepare("
-    SELECT oi.*, p.name, p.image, s.business_name AS seller_name
+    SELECT oi.*, p.name, p.image, p.seller_id, s.business_name AS seller_name
     FROM order_items oi
     JOIN products p ON oi.product_id = p.id
     LEFT JOIN sellers s ON p.seller_id = s.id
     WHERE oi.order_id = ?
+    ORDER BY p.seller_id, p.name
 ");
 $stmt->execute([$order_id]);
 $order_items = $stmt->fetchAll();
+
+$seller_groups = [];
+foreach ($order_items as $item) {
+    $seller_key = $item['seller_id'] ?? 'unknown';
+
+    if (!isset($seller_groups[$seller_key])) {
+        $seller_groups[$seller_key] = [
+            'seller_id' => $item['seller_id'],
+            'seller_name' => $item['seller_name'] ?? 'Unknown Shop',
+            'status' => $item['status'] ?? $order['status'],
+            'items' => [],
+            'subtotal' => 0,
+        ];
+    }
+
+    $seller_groups[$seller_key]['items'][] = $item;
+    $seller_groups[$seller_key]['subtotal'] += $item['price'] * $item['quantity'];
+}
+
+$group_status_counts = [];
+foreach ($seller_groups as $group) {
+    $group_status_counts[$group['status']] = ($group_status_counts[$group['status']] ?? 0) + 1;
+}
+$active_group_statuses = $group_status_counts;
+unset($active_group_statuses['cancelled']);
+
+if (empty($active_group_statuses)) {
+    $display_order_status = 'cancelled';
+} elseif (!empty($active_group_statuses['pending'])) {
+    $display_order_status = 'pending';
+} elseif (!empty($active_group_statuses['processing'])) {
+    $display_order_status = 'processing';
+} elseif (!empty($active_group_statuses['shipped'])) {
+    $display_order_status = 'shipped';
+} elseif (!empty($active_group_statuses['delivered'])) {
+    $display_order_status = 'delivered';
+} else {
+    $display_order_status = 'completed';
+}
+$order['status'] = $display_order_status;
 
 // Fetch user profile pic
 $stmt = $pdo->prepare("SELECT profile_pic FROM users WHERE id = ?");
@@ -303,47 +345,42 @@ if ($current_index === false) $current_index = -1; // cancelled / other
 
             </div>
 
-            <!-- Items table -->
+            <!-- Items by seller -->
             <div class="items-card">
                 <div class="items-card-header">🛍️ Order Items (<?= count($order_items) ?>)</div>
-                <div style="overflow-x:auto;">
-                    <table class="items-table">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Price</th>
-                                <th>Qty</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($order_items as $item): ?>
-                            <tr>
-                                <td>
-                                    <div class="prod-cell">
-                                        <?php if (!empty($item['image']) && file_exists("../product_images/" . $item['image'])): ?>
-                                            <img class="prod-thumb"
-                                                 src="../product_images/<?= htmlspecialchars($item['image']) ?>"
-                                                 alt="<?= htmlspecialchars($item['name']) ?>"
-                                                 onerror="this.style.opacity='.3'">
-                                        <?php else: ?>
-                                            <div class="prod-thumb-placeholder">🛍️</div>
-                                        <?php endif; ?>
-                                        <div>
-                                            <div class="prod-name"><?= htmlspecialchars($item['name']) ?></div>
-                                            <?php if (!empty($item['seller_name'])): ?>
-                                                <div class="prod-seller">by <?= htmlspecialchars($item['seller_name']) ?></div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>₱<?= number_format($item['price'], 2) ?></td>
-                                <td><?= $item['quantity'] ?></td>
-                                <td class="subtotal-cell">₱<?= number_format($item['price'] * $item['quantity'], 2) ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                <div class="seller-group-list">
+                    <?php foreach ($seller_groups as $group): ?>
+                    <div class="seller-order-box">
+                        <div class="seller-order-header">
+                            <span><?= htmlspecialchars($group['seller_name']) ?></span>
+                            <span class="status-badge status-<?= htmlspecialchars($group['status']) ?>"><?= ucfirst($group['status']) ?></span>
+                            <span><?= count($group['items']) ?> item<?= count($group['items']) === 1 ? '' : 's' ?></span>
+                        </div>
+                        <?php foreach ($group['items'] as $item): ?>
+                        <div class="seller-order-item">
+                            <div class="prod-cell">
+                                <?php if (!empty($item['image']) && file_exists("../product_images/" . $item['image'])): ?>
+                                    <img class="prod-thumb"
+                                         src="../product_images/<?= htmlspecialchars($item['image']) ?>"
+                                         alt="<?= htmlspecialchars($item['name']) ?>"
+                                         onerror="this.style.opacity='.3'">
+                                <?php else: ?>
+                                    <div class="prod-thumb-placeholder">🛍️</div>
+                                <?php endif; ?>
+                                <div>
+                                    <div class="prod-name"><?= htmlspecialchars($item['name']) ?></div>
+                                    <div class="prod-meta">Qty: <?= $item['quantity'] ?> | Price: &#8369;<?= number_format($item['price'], 2) ?></div>
+                                </div>
+                            </div>
+                            <div class="subtotal-cell">&#8369;<?= number_format($item['price'] * $item['quantity'], 2) ?></div>
+                        </div>
+                        <?php endforeach; ?>
+                        <div class="seller-order-total">
+                            <span>Store Total</span>
+                            <span>&#8369;<?= number_format($group['subtotal'], 2) ?></span>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
 
@@ -497,6 +534,45 @@ if ($current_index === false) $current_index = -1; // cancelled / other
          font-size: 11.5px; color: var(--text-muted);
          font-weight: 600;
      }
+
+     .receipt-seller-groups {
+         display: flex;
+         flex-direction: column;
+         gap: 14px;
+     }
+     .receipt-seller-box {
+         border: 1.5px solid var(--pink-mid);
+         border-radius: 10px;
+         overflow: hidden;
+     }
+     .receipt-seller-header,
+     .receipt-seller-total {
+         display: flex;
+         justify-content: space-between;
+         gap: 12px;
+         font-size: 13px;
+         font-weight: 800;
+     }
+     .receipt-seller-header {
+         background: var(--pink-pale);
+         border-bottom: 1.5px solid var(--pink-mid);
+         color: var(--text-dark);
+         padding: 10px 12px;
+     }
+     .receipt-seller-header span:last-child {
+         color: var(--text-muted);
+         white-space: nowrap;
+     }
+     .receipt-seller-box .receipt-items-table {
+         margin: 0 12px;
+         width: calc(100% - 24px);
+     }
+     .receipt-seller-total {
+         background: var(--pink-soft);
+         color: var(--text-dark);
+         padding: 10px 12px;
+     }
+     .receipt-seller-total span:last-child { color: var(--pink-accent); }
 
      .receipt-summary-section {
          background: var(--pink-pale);
@@ -653,31 +729,43 @@ if ($current_index === false) $current_index = -1; // cancelled / other
                  <!-- Order Items -->
                  <div class="receipt-section">
                      <h3>Order Items (<?= count($order_items) ?>)</h3>
-                     <table class="receipt-items-table">
-                         <thead>
-                             <tr>
-                                 <th>Product</th>
-                                 <th>Qty</th>
-                                 <th>Price</th>
-                                 <th>Subtotal</th>
-                             </tr>
-                         </thead>
-                         <tbody>
-                             <?php foreach ($order_items as $item): ?>
-                             <tr>
-                                 <td>
-                                     <div class="receipt-item-name"><?= htmlspecialchars($item['name']) ?></div>
-                                     <?php if (!empty($item['seller_name'])): ?>
-                                         <div class="receipt-item-seller">by <?= htmlspecialchars($item['seller_name']) ?></div>
-                                     <?php endif; ?>
-                                 </td>
-                                 <td><?= $item['quantity'] ?></td>
-                                 <td>₱<?= number_format($item['price'], 2) ?></td>
-                                 <td>₱<?= number_format($item['price'] * $item['quantity'], 2) ?></td>
-                             </tr>
-                             <?php endforeach; ?>
-                         </tbody>
-                     </table>
+                     <div class="receipt-seller-groups">
+                         <?php foreach ($seller_groups as $group): ?>
+                         <div class="receipt-seller-box">
+                             <div class="receipt-seller-header">
+                                 <span><?= htmlspecialchars($group['seller_name']) ?></span>
+                                 <span class="status-badge status-<?= htmlspecialchars($group['status']) ?>"><?= ucfirst($group['status']) ?></span>
+                                 <span><?= count($group['items']) ?> item<?= count($group['items']) === 1 ? '' : 's' ?></span>
+                             </div>
+                             <table class="receipt-items-table">
+                                 <thead>
+                                     <tr>
+                                         <th>Product</th>
+                                         <th>Qty</th>
+                                         <th>Price</th>
+                                         <th>Subtotal</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody>
+                                     <?php foreach ($group['items'] as $item): ?>
+                                     <tr>
+                                         <td>
+                                             <div class="receipt-item-name"><?= htmlspecialchars($item['name']) ?></div>
+                                         </td>
+                                         <td><?= $item['quantity'] ?></td>
+                                         <td>&#8369;<?= number_format($item['price'], 2) ?></td>
+                                         <td>&#8369;<?= number_format($item['price'] * $item['quantity'], 2) ?></td>
+                                     </tr>
+                                     <?php endforeach; ?>
+                                 </tbody>
+                             </table>
+                             <div class="receipt-seller-total">
+                                 <span>Store Total</span>
+                                 <span>&#8369;<?= number_format($group['subtotal'], 2) ?></span>
+                             </div>
+                         </div>
+                         <?php endforeach; ?>
+                     </div>
                  </div>
 
                  <!-- Order Summary -->

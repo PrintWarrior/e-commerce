@@ -265,18 +265,6 @@ $pagination_params = array_filter([
                                 <input type="hidden" name="redirect_to" value="<?= htmlspecialchars($returnUrl) ?>">
                                 <button type="submit" <?= $outOfStock ? 'disabled' : '' ?>><?= $outOfStock ? 'Unavailable' : 'Add to Cart' ?></button>
                             </form>
-                            <form method="post" action="add_to_cart.php">
-                                <input type="hidden" name="product_id" value="<?= (int)$product['id'] ?>">
-                                <input type="hidden" name="quantity" value="1">
-                                <input type="hidden" name="redirect_to" value="<?= htmlspecialchars($returnUrl) ?>">
-                                <button type="submit" class="icon-btn" title="Add to cart" <?= $outOfStock ? 'disabled' : '' ?>>
-                                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="9" cy="21" r="1"></circle>
-                                        <circle cx="20" cy="21" r="1"></circle>
-                                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-                                    </svg>
-                                </button>
-                            </form>
                         </div>
                     </article>
                 <?php endforeach; ?>

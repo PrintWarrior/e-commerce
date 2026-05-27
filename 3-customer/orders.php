@@ -8,6 +8,7 @@ if (!$customer_id) {
     $stmt->execute([$_SESSION['user_id']]);
     $customer_id = $pdo->lastInsertId();
 }
+ensureOrderItemFulfillmentColumns();
 
 // Get user profile pic
 $stmt = $pdo->prepare("SELECT profile_pic FROM users WHERE id = ?");
@@ -19,18 +20,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $order_id = (int)($_POST['order_id'] ?? 0);
 
     if (isset($_POST['cancel_order'])) {
-        // Only allow cancel if pending
-        $stmt = $pdo->prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND customer_id = ? AND status = 'pending'");
-        $stmt->execute([$order_id, $customer_id]);
-        if ($stmt->rowCount() > 0) {
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE oi.order_id = ? AND o.customer_id = ? AND oi.status <> 'pending'");
+            $stmt->execute([$order_id, $customer_id]);
+            if ((int) $stmt->fetchColumn() > 0) {
+                throw new RuntimeException('Only fully pending orders can be cancelled together.');
+            }
+
+            $stmt = $pdo->prepare("UPDATE order_items oi JOIN orders o ON o.id = oi.order_id SET oi.status = 'cancelled' WHERE oi.order_id = ? AND o.customer_id = ?");
+            $stmt->execute([$order_id, $customer_id]);
+            syncOrderStatusFromItems($order_id);
+            $pdo->commit();
             logSystemEvent(
                 'customer_order_cancelled',
                 'orders',
                 $order_id,
                 "Customer {$_SESSION['username']} cancelled order #{$order_id}."
             );
+            $_SESSION['flash_success'] = "Order #$order_id has been cancelled.";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['flash_success'] = $e->getMessage();
         }
-        $_SESSION['flash_success'] = "Order #$order_id has been cancelled.";
+    }
+
+    if (isset($_POST['cancel_store_order'])) {
+        $seller_id = (int)($_POST['seller_id'] ?? 0);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE order_items oi
+                JOIN products p ON p.id = oi.product_id
+                JOIN orders o ON o.id = oi.order_id
+                SET oi.status = 'cancelled'
+                WHERE oi.order_id = ?
+                  AND o.customer_id = ?
+                  AND p.seller_id = ?
+                  AND oi.status = 'pending'
+            ");
+            $stmt->execute([$order_id, $customer_id, $seller_id]);
+
+            if ($stmt->rowCount() === 0) {
+                throw new RuntimeException('This store order cannot be cancelled anymore.');
+            }
+
+            syncOrderStatusFromItems($order_id);
+            $pdo->commit();
+            $_SESSION['flash_success'] = "Store order in Order #$order_id has been cancelled.";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $_SESSION['flash_success'] = $e->getMessage();
+        }
     }
 
     if (isset($_POST['order_received'])) {
@@ -45,8 +90,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             applyOrderStockForStatusTransition($order_id, (string) $current_status, 'completed');
-            $stmt = $pdo->prepare("UPDATE orders SET status = 'completed' WHERE id = ? AND customer_id = ?");
+            $stmt = $pdo->prepare("
+                UPDATE order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                SET oi.status = 'completed'
+                WHERE oi.order_id = ? AND o.customer_id = ? AND oi.status IN ('shipped', 'delivered', 'completed')
+            ");
             $stmt->execute([$order_id, $customer_id]);
+            syncOrderStatusFromItems($order_id);
             $pdo->commit();
             $_SESSION['flash_success'] = "Order #$order_id marked as received. Thank you!";
         } catch (Throwable $e) {
@@ -115,14 +166,53 @@ $stmt->execute();
 $orders = $stmt->fetchAll();
 
 foreach ($orders as &$order) {
-    $s = $pdo->prepare("SELECT oi.*, p.name, p.image, s.business_name AS seller_name
+    $s = $pdo->prepare("SELECT oi.*, p.name, p.image, p.seller_id, s.business_name AS seller_name
                         FROM order_items oi
                         JOIN products p ON oi.product_id = p.id
                         LEFT JOIN sellers s ON p.seller_id = s.id
-                        WHERE oi.order_id = ?");
+                        WHERE oi.order_id = ?
+                        ORDER BY p.seller_id, p.name");
     $s->execute([$order['id']]);
     $order['items'] = $s->fetchAll();
+    $order['seller_groups'] = [];
+
+    foreach ($order['items'] as $item) {
+        $seller_key = $item['seller_id'] ?? 'unknown';
+
+        if (!isset($order['seller_groups'][$seller_key])) {
+            $order['seller_groups'][$seller_key] = [
+                'seller_id' => $item['seller_id'],
+                'seller_name' => $item['seller_name'] ?? 'Unknown Shop',
+                'status' => $item['status'] ?? $order['status'],
+                'items' => [],
+                'subtotal' => 0,
+            ];
+        }
+
+        $order['seller_groups'][$seller_key]['items'][] = $item;
+        $order['seller_groups'][$seller_key]['subtotal'] += $item['price'] * $item['quantity'];
+    }
+
+    $group_statuses = array_column($order['seller_groups'], 'status');
+    $order['all_groups_pending'] = !empty($group_statuses) && count(array_unique($group_statuses)) === 1 && $group_statuses[0] === 'pending';
+    $order['all_groups_receivable'] = !empty($group_statuses) && empty(array_diff($group_statuses, ['shipped', 'delivered', 'completed']));
+
+    $active_group_statuses = array_values(array_filter($group_statuses, fn($status) => $status !== 'cancelled'));
+    if (empty($active_group_statuses)) {
+        $order['status'] = 'cancelled';
+    } elseif (in_array('pending', $active_group_statuses, true)) {
+        $order['status'] = 'pending';
+    } elseif (in_array('processing', $active_group_statuses, true)) {
+        $order['status'] = 'processing';
+    } elseif (in_array('shipped', $active_group_statuses, true)) {
+        $order['status'] = 'shipped';
+    } elseif (in_array('delivered', $active_group_statuses, true)) {
+        $order['status'] = 'delivered';
+    } else {
+        $order['status'] = 'completed';
+    }
 }
+unset($order);
 
 // Status counts for filter tabs
 $counts = [];
@@ -304,55 +394,60 @@ $pagination_params = array_filter([
                         </div>
                     </div>
 
-                    <!-- Items table -->
-                    <div class="items-table-wrap">
-                        <table class="items-table">
-                            <thead>
-                                <tr>
-                                    <th></th>
-                                    <th>Product</th>
-                                    <th>Qty</th>
-                                    <th>Price</th>
-                                    <th>Subtotal</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($order['items'] as $item): ?>
-                                <tr>
-                                    <td>
-                                        <?php if (!empty($item['image']) && file_exists("../product_images/".$item['image'])): ?>
-                                            <img class="item-thumb"
-                                                 src="../product_images/<?= htmlspecialchars($item['image']) ?>"
-                                                 alt="<?= htmlspecialchars($item['name']) ?>"
-                                                 onerror="this.style.opacity='.3'">
-                                        <?php else: ?>
-                                            <div class="item-thumb-placeholder">🛍️</div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div class="item-name-cell"><?= htmlspecialchars($item['name']) ?></div>
-                                        <?php if (!empty($item['seller_name'])): ?>
-                                            <div class="item-seller-cell">Sold by <?= htmlspecialchars($item['seller_name']) ?></div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?= $item['quantity'] ?></td>
-                                    <td>₱<?= number_format($item['price'], 2) ?></td>
-                                    <td>₱<?= number_format($item['price'] * $item['quantity'], 2) ?></td>
-                                </tr>
-                                <?php endforeach; ?>
-                                <!-- Total row -->
-                                <tr class="total-row">
-                                    <td colspan="3"></td>
-                                    <td style="text-align:right; font-weight:800; color:var(--text-dark);">Total:</td>
-                                    <td class="total-val">₱<?= number_format($order['total_amount'], 2) ?></td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <!-- Items by seller -->
+                    <div class="order-seller-groups">
+                        <?php foreach ($order['seller_groups'] as $group): ?>
+                        <div class="order-seller-box">
+                            <div class="order-seller-header">
+                                <span><?= htmlspecialchars($group['seller_name']) ?></span>
+                                <span class="status-text status-<?= htmlspecialchars($group['status']) ?>"><?= ucfirst($group['status']) ?></span>
+                                <span><?= count($group['items']) ?> item<?= count($group['items']) === 1 ? '' : 's' ?></span>
+                            </div>
+                            <?php foreach ($group['items'] as $item): ?>
+                            <div class="order-item-row">
+                                <div>
+                                    <?php if (!empty($item['image']) && file_exists("../product_images/".$item['image'])): ?>
+                                        <img class="item-thumb"
+                                             src="../product_images/<?= htmlspecialchars($item['image']) ?>"
+                                             alt="<?= htmlspecialchars($item['name']) ?>"
+                                             onerror="this.style.opacity='.3'">
+                                    <?php else: ?>
+                                        <div class="item-thumb-placeholder">🛍️</div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="item-info">
+                                    <div class="item-name-cell"><?= htmlspecialchars($item['name']) ?></div>
+                                    <div class="item-line">Qty: <?= $item['quantity'] ?> | Price: &#8369;<?= number_format($item['price'], 2) ?></div>
+                                </div>
+                                <div class="item-subtotal">&#8369;<?= number_format($item['price'] * $item['quantity'], 2) ?></div>
+                            </div>
+                            <?php endforeach; ?>
+                            <div class="order-seller-total">
+                                <span>Store Total</span>
+                                <span>&#8369;<?= number_format($group['subtotal'], 2) ?></span>
+                            </div>
+                            <?php if ($group['status'] === 'pending'): ?>
+                            <form method="post" class="store-cancel-form">
+                                <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                <input type="hidden" name="seller_id" value="<?= (int) $group['seller_id'] ?>">
+                                <input type="hidden" name="page" value="<?= $current_page ?>">
+                                <button type="submit" name="cancel_store_order" class="btn-cancel"
+                                        onclick="return confirm('Cancel this store order from <?= htmlspecialchars($group['seller_name'], ENT_QUOTES) ?>?')">
+                                    Cancel Store Order
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                        <div class="order-grand-total">
+                            <span>Order Total</span>
+                            <span>&#8369;<?= number_format($order['total_amount'], 2) ?></span>
+                        </div>
                     </div>
 
                     <!-- Actions -->
                     <div class="order-card-footer">
-                        <?php if ($order['status'] === 'pending'): ?>
+                        <?php if (!empty($order['all_groups_pending'])): ?>
                             <form method="post">
                                 <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
                                 <input type="hidden" name="page" value="<?= $current_page ?>">
@@ -363,7 +458,7 @@ $pagination_params = array_filter([
                             </form>
                         <?php endif; ?>
 
-                        <?php if (in_array($order['status'], ['shipped', 'delivered'])): ?>
+                        <?php if (!empty($order['all_groups_receivable']) && in_array($order['status'], ['shipped', 'delivered'])): ?>
                             <form method="post">
                                 <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
                                 <input type="hidden" name="page" value="<?= $current_page ?>">
